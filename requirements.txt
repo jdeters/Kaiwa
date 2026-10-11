@@ -6,3 +6,5 @@ janome
 pykakasi
 requests
 python-multipart
+anthropic
+pyyaml

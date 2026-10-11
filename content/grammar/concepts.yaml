@@ -1,0 +1,328 @@
+# Canonical grammar concepts — textbook-independent.
+#
+# Each concept has a stable id. Textbook files (content/textbooks/) map lessons
+# to these ids. `requires` lists hard prerequisites; teaching order lives in the
+# textbook mapping, not here. Detection rules are added per concept once the
+# validator exists; concepts without one are enforced by prompt only.
+#
+# Example sentences are original, not copied from any textbook, and use normal
+# kanji-kana spelling (that's what the validator analyzes).
+#
+# enforced_by: vocabulary — the concept is a set of words (demonstratives,
+# time words, どんな …) and is checked by the vocabulary list, not by detect().
+
+concepts:
+
+  # ---------------------------------------------------------------- copula / nouns
+  - id: copula.desu
+    name: "N1 は N2 です"
+    gloss: Polite copula — "N1 is N2".
+    example: 私は学生です。
+
+  - id: copula.desu.question
+    name: "～ですか"
+    gloss: Yes/no question with か.
+    example: 田中さんですか。
+    requires: [copula.desu]
+
+  - id: copula.desu.negative
+    name: "N じゃありません"
+    gloss: Polite negative copula.
+    example: これはペンじゃありません。
+    requires: [copula.desu]
+
+  - id: copula.alternative_question
+    name: "N1 ですか、N2 ですか"
+    gloss: Either/or question.
+    example: コーヒーですか、紅茶ですか。
+    enforced_by: vocabulary
+    requires: [copula.desu.question]
+
+  - id: topic.omission
+    name: Topic omission
+    gloss: Dropping an obvious topic (わたしは).
+    example: スミスです。
+    enforced_by: vocabulary
+
+  # ---------------------------------------------------------------- の / demonstratives
+  - id: no.affiliation
+    name: "Company の person"
+    gloss: の linking an organization and a person.
+    example: ABC銀行の鈴木です。
+
+  - id: no.possession
+    name: "Person の N"
+    gloss: Possessive の.
+    example: これは私の傘です。
+
+  - id: no.modifier
+    name: "N1 の N2"
+    gloss: Noun modifying a noun (place/time/category), e.g. にほんの くるま.
+    example: 日本の車です。
+
+  - id: demonstrative.kore
+    name: "これ／それ／あれ"
+    gloss: Standalone demonstrative pronouns.
+    example: それは何ですか。
+    enforced_by: vocabulary
+
+  - id: demonstrative.kono
+    name: "この／その／あの N"
+    gloss: Demonstrative adjectives before a noun.
+    example: このかばんはいくらですか。
+    enforced_by: vocabulary
+    requires: [demonstrative.kore]
+
+  # ---------------------------------------------------------------- time / numbers
+  - id: time.ima
+    name: "(いま) time です"
+    gloss: Telling the time.
+    example: 今、三時です。
+    enforced_by: vocabulary
+
+  - id: kara.made.time
+    name: "N は T1 から T2 まで です"
+    gloss: From/until with times.
+    example: 銀行は九時から三時までです。
+
+  - id: counter.quantity_request
+    name: "N を number ください"
+    gloss: Ordering a quantity with a counter (～つ, ～ほん, ～まい).
+    example: りんごを二つください。
+    enforced_by: vocabulary
+
+  # ---------------------------------------------------------------- particles
+  - id: particle.mo
+    name: "N も"
+    gloss: "Also / too."
+    example: これも千円です。
+
+  - id: particle.to.and
+    name: "N1 と N2"
+    gloss: Listing nouns ("and").
+    example: パンと卵をください。
+
+  - id: particle.to.with
+    name: "Person と"
+    gloss: Doing something with someone.
+    example: 友達と行きます。
+
+  - id: particle.wo.object
+    name: "N を verb"
+    gloss: Direct object.
+    example: 寿司を食べます。
+    requires: [verb.masu]
+
+  - id: particle.ni.destination
+    name: "Place に いきます"
+    gloss: Destination of movement verbs (いく／くる／かえる).
+    example: 明日、京都に行きます。
+    requires: [verb.masu]
+
+  - id: particle.ni.time
+    name: "Specific time に"
+    gloss: に with clock times, dates, days of the week.
+    example: 七時に起きます。
+    requires: [verb.masu]
+
+  - id: particle.ni.target
+    name: "Person/place に verb"
+    gloss: Indirect object / target (あう, でんわする, おしえる).
+    example: 友達に電話します。
+    requires: [verb.masu]
+
+  - id: particle.de.location
+    name: "Place で verb"
+    gloss: Location where an action happens.
+    example: 公園でテニスをします。
+    requires: [verb.masu]
+
+  - id: particle.de.means
+    name: "Transportation で"
+    gloss: Means of transport.
+    example: 電車で行きます。
+    requires: [verb.masu]
+
+  - id: particle.kara.origin
+    name: "Place から きました"
+    gloss: Point of origin.
+    example: カナダから来ました。
+    requires: [verb.masu]
+
+  # ---------------------------------------------------------------- requests
+  - id: request.kudasai
+    name: "N を ください"
+    gloss: Asking for an item.
+    example: 水をください。
+
+  - id: request.onegaishimasu
+    name: "N を おねがいします"
+    gloss: Polite ordering / requesting.
+    example: コーヒーをお願いします。
+
+  # ---------------------------------------------------------------- verbs (polite)
+  - id: verb.masu
+    name: "～ます"
+    gloss: Polite non-past affirmative (present / future / habitual).
+    example: 毎日コーヒーを飲みます。
+
+  - id: verb.masen
+    name: "～ません"
+    gloss: Polite non-past negative.
+    example: テレビを見ません。
+    requires: [verb.masu]
+
+  - id: verb.mashita
+    name: "～ました"
+    gloss: Polite past affirmative.
+    example: 昨日、映画を見ました。
+    requires: [verb.masu]
+
+  - id: verb.masendeshita
+    name: "～ませんでした"
+    gloss: Polite past negative.
+    example: 何も食べませんでした。
+    requires: [verb.mashita, verb.masen]
+
+  - id: negative.nanimo
+    name: "なにも + negative"
+    gloss: Nothing / not anything (also どこにも, だれも).
+    example: 何も買いませんでした。
+    enforced_by: vocabulary
+    requires: [verb.masen]
+
+  - id: adverb.frequency_negative
+    name: "あまり／ぜんぜん + negative"
+    gloss: "Not very often / not at all."
+    example: あまりテレビを見ません。
+    enforced_by: vocabulary
+    requires: [verb.masen]
+
+  - id: time.relative
+    name: Relative time expressions
+    gloss: きのう, あした, こんしゅう, らいねん … used without に.
+    example: 来週、大阪に行きます。
+    enforced_by: vocabulary
+
+  - id: habitual
+    name: Habitual action
+    gloss: まいにち / まいあさ + ます form for routine actions.
+    example: 毎朝ジョギングをします。
+    enforced_by: vocabulary
+    requires: [verb.masu]
+
+  # ---------------------------------------------------------------- adjectives
+  - id: adj.i.predicate
+    name: "い-adj です"
+    gloss: い-adjective as predicate, non-past.
+    example: このケーキはおいしいです。
+
+  - id: adj.na.predicate
+    name: "な-adj です"
+    gloss: な-adjective as predicate, non-past.
+    example: この町は静かです。
+
+  - id: adj.i.attributive
+    name: "い-adj + N"
+    gloss: い-adjective modifying a noun.
+    example: 新しい靴を買いました。
+
+  - id: adj.na.attributive
+    name: "な-adj な + N"
+    gloss: な-adjective modifying a noun.
+    example: 有名なレストランです。
+
+  - id: adj.i.negative
+    name: "い-adj くないです"
+    gloss: い-adjective non-past negative (いい → よくないです).
+    example: 今日は寒くないです。
+    requires: [adj.i.predicate]
+
+  - id: adj.na.negative
+    name: "な-adj じゃありません"
+    gloss: な-adjective non-past negative.
+    example: この部屋は静かじゃありません。
+    requires: [adj.na.predicate, copula.desu.negative]
+
+  - id: question.donna
+    name: "どんな N"
+    gloss: "What kind of N?"
+    example: どんなところですか。
+    enforced_by: vocabulary
+
+  # ---------------------------------------------------------------- later lessons (not yet unlocked)
+  # Listed so the validator can name what it blocks.
+  - id: adj.past
+    name: "Adjective past (～かったです／～でした)"
+    gloss: Past tense of adjectives.
+    example: 昨日は寒かったです。
+
+  - id: copula.past
+    name: "N でした"
+    gloss: Polite past copula.
+    example: 昨日は休みでした。
+
+  - id: particle.ga.subject
+    name: "N が"
+    gloss: Subject marker (with あります／います, すき, わかる …).
+    example: 庭に犬がいます。
+
+  - id: particle.ya
+    name: "N1 や N2"
+    gloss: Non-exhaustive listing ("A, B, and so on").
+    example: パンや果物を買いました。
+
+  - id: nominalizer.no
+    name: "Verb の"
+    gloss: Turning a verb phrase into a noun (みるのが すきです).
+    example: 映画を見るのが好きです。
+
+  - id: conj.kara.because
+    name: "Clause から、clause"
+    gloss: Reason clause ("because").
+    example: 暑いですから、窓を開けます。
+
+  - id: casual.copula
+    name: "Plain だ"
+    gloss: Casual copula.
+    example: 今日は休みだ。
+
+  - id: casual.verb_past
+    name: "Plain past (～た)"
+    gloss: Casual past verb form.
+    example: 昨日、映画を見た。
+
+  - id: conj.ga.but
+    name: "Clause が、clause"
+    gloss: Contrastive "but".
+    example: 行きましたが、何も買いませんでした。
+
+  - id: existence.arimasu_imasu
+    name: "あります／います"
+    gloss: Existence and location.
+    example: 机の上に本があります。
+
+  - id: verb.dictionary
+    name: Dictionary form
+    gloss: Plain non-past verb form.
+    example: 見るのが好きです。
+
+  - id: verb.mashou
+    name: "～ましょう／～ませんか"
+    gloss: Suggestions and invitations.
+    example: 一緒に行きましょう。
+
+  - id: verb.tai
+    name: "～たいです"
+    gloss: Wanting to do something.
+    example: 寿司を食べたいです。
+
+  - id: verb.te
+    name: て-form
+    gloss: Connective form and its uses (てください, ています …).
+    example: ちょっと待ってください。
+
+  - id: verb.nai
+    name: ない-form
+    gloss: Plain negative and ないでください.
+    example: 写真を撮らないでください。

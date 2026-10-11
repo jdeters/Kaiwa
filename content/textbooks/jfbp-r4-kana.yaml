@@ -1,0 +1,30 @@
+# Japanese for Busy People I, Revised 4th Edition (Kana Version)
+# Lesson → canonical grammar concept ids (content/grammar/concepts.yaml).
+# Built from the table of contents; only concept ids and lesson numbers are
+# recorded here, no textbook content.
+
+textbook:
+  id: jfbp-r4-kana
+  title: Japanese for Busy People I (Revised 4th Edition, Kana Version)
+  script: kana          # learner reads kana; render unlearned kanji as kana/furigana
+
+lessons:
+  1:  [copula.desu, copula.desu.question, no.affiliation, topic.omission]
+  2:  [demonstrative.kore, copula.desu.negative, no.possession]
+  3:  [time.ima, kara.made.time, no.modifier]
+  4:  [particle.mo, request.kudasai, request.onegaishimasu, particle.to.and]
+  5:  [demonstrative.kono, adj.i.attributive, counter.quantity_request]
+  6:  [verb.masu, verb.masen, verb.mashita, verb.masendeshita,
+       particle.ni.destination, time.relative, particle.to.with, particle.kara.origin]
+  7:  [particle.ni.time, particle.de.means, copula.alternative_question]
+  8:  [particle.wo.object, particle.de.location, negative.nanimo]
+  9:  [particle.ni.target, habitual, adverb.frequency_negative]
+  10: [adj.i.predicate, adj.na.predicate, adj.na.attributive,
+       adj.i.negative, adj.na.negative, question.donna]
+  11: [adj.past, copula.past, conj.ga.but]
+  12: [existence.arimasu_imasu, particle.ga.subject, particle.ya]
+  15: [verb.dictionary, nominalizer.no]
+  16: [verb.mashou, conj.kara.because]
+  17: [verb.tai]
+  18: [verb.te]
+  22: [verb.nai]

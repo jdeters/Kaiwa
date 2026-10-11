@@ -1,0 +1,73 @@
+# Phase 1 evaluation scenarios. Each is a communicative goal; the generator
+# adapts the language to whatever the learner profile allows.
+
+scenarios:
+  - id: introductions
+    title: Meeting someone new
+    setting: A welcome party at a company in Tokyo.
+    ai_role: A friendly Japanese coworker meeting the learner for the first time.
+    user_role: A new employee from abroad.
+    goal: Exchange names, nationalities, and where each person works.
+
+  - id: whose_is_it
+    title: Whose is this?
+    setting: An office meeting room after a meeting; some things were left behind.
+    ai_role: A coworker tidying up the room.
+    user_role: A coworker helping.
+    goal: Identify objects and who they belong to.
+
+  - id: opening_hours
+    title: Asking about opening hours
+    setting: A phone call to a museum or bank.
+    ai_role: A staff member answering the phone.
+    user_role: A visitor asking when the place is open.
+    goal: Find out opening and closing times.
+
+  - id: cafe
+    title: Ordering at a café
+    setting: A small café.
+    ai_role: The café staff member taking the order.
+    user_role: A customer.
+    goal: Order drinks and food, and confirm the order and price.
+
+  - id: shopping
+    title: Shopping for clothes
+    setting: A department store clothing floor.
+    ai_role: A shop assistant.
+    user_role: A shopper.
+    goal: Ask about items, prices, and buy something.
+
+  - id: weekend
+    title: Last weekend and next weekend
+    setting: Chatting with a coworker on Monday morning.
+    ai_role: A friendly coworker.
+    user_role: The learner.
+    goal: Talk about where you went and what you did last weekend, and plans for next weekend.
+
+  - id: travel
+    title: Getting around
+    setting: Planning a business trip with a coworker.
+    ai_role: A coworker who is also going.
+    user_role: The learner.
+    goal: Discuss when you're going, how you'll travel (train, plane, car), and who with.
+
+  - id: daily_routine
+    title: Daily routine
+    setting: A casual lunch with a coworker.
+    ai_role: A curious coworker.
+    user_role: The learner.
+    goal: Talk about what you do every day, how often you do things, and what you eat and drink.
+
+  - id: restaurant
+    title: At a restaurant
+    setting: A Japanese restaurant at dinner time.
+    ai_role: Restaurant staff.
+    user_role: A customer.
+    goal: Ask what is recommended, order, and react to the food.
+
+  - id: visiting_home
+    title: Visiting a Japanese home
+    setting: Visiting a coworker's home for the first time.
+    ai_role: The host.
+    user_role: The guest.
+    goal: Greet, accept food and drink, and talk about the city, the weather, and things you like.

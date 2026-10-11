@@ -1,0 +1,69 @@
+# Words every learner may see regardless of their vocabulary list: pronouns,
+# question words, number/counter suffixes, and basic responses. Matched by
+# lemma or by reading (hiragana). Particles and auxiliaries are grammar and are
+# handled by the grammar detector instead.
+
+words:
+  # demonstratives & pronouns
+  - これ
+  - それ
+  - あれ
+  - どれ
+  - この
+  - その
+  - あの
+  - どの
+  - ここ
+  - そこ
+  - あそこ
+  - どこ
+  - こちら
+  - そちら
+  - あちら
+  - どちら
+  - 私
+  - あなた
+  # question words
+  - 何
+  - 誰
+  - いつ
+  - いくら
+  - どう
+  - どんな
+  - いくつ
+  - 何時
+  # greetings (こんにちは analyzes as 今日は)
+  - 今日は
+  - 今晩は
+  - さようなら
+  # responses & discourse
+  - はい
+  - いいえ
+  - ええ
+  - そう
+  - じゃ
+  - では
+  # name / number / counter suffixes
+  - さん
+  - 円
+  - 時
+  - 分
+  - 半
+  - 月
+  - 日
+  - 年
+  - 人
+  - 語
+  - つ
+  - 本
+  - 枚
+  - 階
+  - 個
+  - 杯
+  - 曜日
+  - 番
+  - 歳
+  - 才
+  - 名
+  # honorific prefixes (お茶, ご飯)
+  - 御

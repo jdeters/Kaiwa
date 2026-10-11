@@ -1,0 +1,28 @@
+# Copy to data/learner.yaml and edit. data/ is never committed.
+#
+# textbook/lesson unlock grammar (content/textbooks/<textbook>.yaml) and,
+# for `include: lessons` sources, the vocabulary of every finished lesson —
+# whether or not you've reviewed those cards in Anki yet.
+
+anki_url: http://127.0.0.1:8765
+textbook: jfbp-r4-kana
+lesson: 10
+
+# Kanji is shown only for words from sources marked `kanji: true`, once their
+# cards reach this tier (learning < familiar < established). Everything else
+# is displayed in kana.
+kanji_min_tier: familiar
+
+sources:
+  - deck: Core 2000
+    word_field: Vocabulary-Kanji
+    reading_field: Vocabulary-Kana
+    meaning_field: Vocabulary-English
+    include: studied            # only cards you've started reviewing
+    kanji: true                 # these cards teach the kanji spelling
+
+  - deck: Japanese for Busy People
+    word_field: Kana
+    meaning_field: Romaji
+    include: lessons            # every note in "Lesson N" subdecks with N <= lesson
+    lesson_pattern: 'Lesson (\d+)(?:-(\d+))?'
