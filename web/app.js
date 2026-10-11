@@ -97,8 +97,8 @@ async function updateHealth() {
     $("#health").innerHTML =
       `${dot(h.claude)} Claude ${h.model.replace("claude-", "")}<br>` +
       `${dot(h.learner.available)} ${h.learner.available ? `lesson ${h.learner.lesson} profile` : "no learner profile"}<br>` +
-      `${dot(h.whisper)} whisper (voice in)<br>` +
-      `${dot(h.voicevox || h.aivis)} ${[h.aivis && "Aivis", h.voicevox && "VOICEVOX"].filter(Boolean).join(" + ") || "macOS voice"} (voice out)`;
+      `${dot(h.whisper)} ${h.whisper ? "whisper" : "no speech model"} (voice in)<br>` +
+      `${dot(h.voicevox || h.aivis)} ${[h.aivis && "Aivis", h.voicevox && "VOICEVOX"].filter(Boolean).join(" + ") || "no voice engine"} (voice out)`;
     updateSetupBanner(h);
   } catch { $("#health").innerHTML = `<span class="bad">●</span> server offline`; }
 }

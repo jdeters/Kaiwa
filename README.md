@@ -21,7 +21,7 @@ say), translations, tap-a-word lookups, session reports, and progress tracking.
 ## Setup
 
 ```bash
-./setup.sh                                  # Python env + dependencies
+./setup.sh --with-voicevox                  # Python env, speech model, dictionary, voice engine
 echo "ANTHROPIC_API_KEY=sk-ant-…" > .env     # or paste it in Settings later
 ```
 
@@ -39,8 +39,16 @@ your decks and the textbook lesson you've reached, then build again. Rebuild
 whenever you've studied more.
 
 ```bash
-./run.sh            # → http://localhost:8130
+./run.sh            # starts VOICEVOX + the app → http://localhost:8130
 ```
+
+Voice: speech recognition is [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+running locally: the small model by default (~1.5 s per sentence on a laptop
+CPU); set `KAIWA_WHISPER_MODEL=medium` or `large-v3-turbo` for more accuracy
+at 2–4× the wait. The partner's voice is
+the [VOICEVOX](https://voicevox.hiroshiba.jp/) engine, also local.
+`--with-voicevox` downloads the Linux x64 build (~1.8 GB); on other platforms,
+unzip the engine for your OS into `vendor/`.
 
 ## How it works
 
@@ -82,7 +90,7 @@ Built on [Kaiwa](https://github.com/yeshsanchez/Kaiwa) by yeshsanchez
 - Morphological analysis: [fugashi](https://github.com/polm/fugashi) + UniDic
 - [VOICEVOX](https://voicevox.hiroshiba.jp/): generated audio must be credited
   per each voice library's terms (e.g. `VOICEVOX:四国めたん`)
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (MIT)
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (MIT), Whisper models by OpenAI (MIT)
 - Icons: [Lucide](https://lucide.dev) (ISC) ·
   QR: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT)
 

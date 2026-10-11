@@ -1,10 +1,11 @@
 """Kaiwa — Japanese conversation practice that stays within what you've learned.
 
-Conversation: learner model + Claude (server/learner). STT: whisper.cpp ·
+Conversation: learner model + Claude (server/learner). STT: faster-whisper ·
 TTS: VOICEVOX / AivisSpeech / macOS say.
 """
 import json
 import os
+import threading
 from datetime import date
 
 from fastapi import FastAPI, File, Request, UploadFile
@@ -22,6 +23,7 @@ MODES = ("free_chat", "roleplay", "call")
 app = FastAPI(title="Kaiwa")
 db.init()
 backup.start_scheduler()
+threading.Thread(target=stt.warm, daemon=True).start()  # load whisper before the first utterance
 
 
 def settings() -> dict:
@@ -287,7 +289,7 @@ async def word(req: Request):
         pos = entry.get("pos") or ""
         pos_label = ", ".join(_POS_LABELS.get(p, p) for p in pos.split(",") if p)
         notes = pos_label
-        if lemma and lemma != w:
+        if conjugated:  # only when the lookup went through the dictionary form
             notes = f"dictionary form: {learner.show(lemma)}" + (f" · {pos_label}" if pos_label else "")
         return {
             "word": w, "reading": entry["reading"] or info["reading"],
@@ -404,7 +406,7 @@ def dictionary_search(q: str = ""):
 @app.post("/api/stt")
 async def api_stt(audio: UploadFile = File(...)):
     if not stt.available():
-        return JSONResponse({"error": "whisper-cli or model missing"}, status_code=503)
+        return JSONResponse({"error": "speech model missing — run ./setup.sh"}, status_code=503)
     data = await audio.read()
     text = stt.transcribe(data)
     return {"text": text}

@@ -1,5 +1,7 @@
 #!/bin/bash
 # One-time setup: Python env, dependencies, speech model, dictionary.
+#   ./setup.sh                   everything except the voice engine
+#   ./setup.sh --with-voicevox   also download VOICEVOX (Linux x64, ~1.8 GB)
 set -e
 cd "$(dirname "$0")"
 
@@ -17,11 +19,32 @@ echo "▶ installing dependencies…"
 
 mkdir -p data models
 
-# whisper.cpp speech-recognition model (~466 MB)
-if [ ! -f models/ggml-small.bin ]; then
-  echo "▶ downloading speech-recognition model (466 MB)…"
-  curl -L --progress-bar -o models/ggml-small.bin \
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+# speech-recognition model for faster-whisper (small, ~480 MB; KAIWA_WHISPER_MODEL overrides)
+if [ -z "$(find models/whisper -name model.bin 2>/dev/null)" ]; then
+  echo "▶ downloading speech-recognition model…"
+  .venv/bin/python -c "from server import stt; stt.load()"
+fi
+
+# VOICEVOX voice engine (opt-in: large download)
+VOICEVOX_VERSION=0.25.2
+if [ "$1" = "--with-voicevox" ] && [ -z "$(ls vendor/linux-*/run 2>/dev/null)" ]; then
+  if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
+    echo "⚠ --with-voicevox downloads the Linux x64 build; get yours from"
+    echo "  https://github.com/VOICEVOX/voicevox_engine/releases and unzip it into vendor/"
+  else
+    command -v 7z >/dev/null || { echo "✗ VOICEVOX ships as .7z — install p7zip (7z) first"; exit 1; }
+    ARCHIVE="vendor/download/voicevox_engine-linux-cpu-x64-$VOICEVOX_VERSION.7z.001"
+    mkdir -p vendor/download
+    if [ ! -f "$ARCHIVE" ]; then
+      echo "▶ downloading VOICEVOX engine (~1.8 GB)…"
+      curl -L --fail --progress-bar -o "$ARCHIVE.part" \
+        "https://github.com/VOICEVOX/voicevox_engine/releases/download/$VOICEVOX_VERSION/$(basename "$ARCHIVE")"
+      mv "$ARCHIVE.part" "$ARCHIVE"
+    fi
+    echo "▶ unpacking VOICEVOX…"
+    7z x -y -ovendor "$ARCHIVE" >/dev/null
+    rm -rf vendor/download
+  fi
 fi
 
 # JMdict dictionary (latest jmdict-simplified English release)
@@ -38,10 +61,6 @@ if ! ls models/jmdict-eng-*.json >/dev/null 2>&1; then
     echo "⚠ couldn't reach the JMdict release — download a jmdict-eng-*.json from"
     echo "  https://github.com/scriptin/jmdict-simplified/releases and put it in models/"
   fi
-fi
-
-if ! command -v whisper-cli >/dev/null 2>&1; then
-  echo "⚠ voice input needs whisper.cpp:  brew install whisper-cpp"
 fi
 
 echo "✓ setup complete. Next:"

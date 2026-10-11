@@ -8,6 +8,7 @@ Returns WAV bytes. Results cached on disk by (text, voice, speed, intonation).
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 
@@ -83,7 +84,7 @@ def default_voice() -> str:
                 return f"{prefix}:{sorted(styles)[0]}"
         except Exception:
             pass
-    return "say:Kyoko"
+    return "say:Kyoko" if shutil.which("say") else ""   # macOS fallback; elsewhere none
 
 
 def synthesize(text: str, voice: str, speed: float = 1.0, intonation: float = 1.0) -> bytes:

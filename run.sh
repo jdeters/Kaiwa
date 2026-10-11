@@ -12,12 +12,15 @@ PORT="${KAIWA_PORT:-8130}"
 [ -f data/learner_profile.json ] || \
   echo "⚠ no learner profile yet — with Anki open, run: .venv/bin/python -m server.learner build"
 
-# 1. VOICEVOX (optional, better voices)
-if [ -x "vendor/macos-x64/run" ]; then
+# 1. VOICEVOX (the tutor's voice; ./setup.sh --with-voicevox installs it on Linux)
+VV=$(ls vendor/linux-*/run vendor/macos-*/run 2>/dev/null | head -1)
+if [ -n "$VV" ] && [ -x "$VV" ]; then
   if ! curl -s --max-time 2 http://127.0.0.1:50021/version >/dev/null; then
     echo "▶ starting VOICEVOX engine (takes ~20s)…"
-    (cd vendor/macos-x64 && ./run --host 127.0.0.1 --port 50021 >/tmp/voicevox.log 2>&1 &)
+    (cd "$(dirname "$VV")" && ./run --host 127.0.0.1 --port 50021 >/tmp/voicevox.log 2>&1 &)
   fi
+else
+  echo "⚠ no VOICEVOX engine in vendor/ — the tutor can't speak (./setup.sh --with-voicevox)"
 fi
 
 # 1b. AivisSpeech (optional — emotional / anime-style voices, VOICEVOX-compatible API)
