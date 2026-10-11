@@ -1,6 +1,6 @@
 """Backup, export and restore of user data.
 
-Everything worth keeping (streak, saved words, sessions, mistakes, settings)
+Everything worth keeping (streak, sessions, mistakes, settings)
 lives in one SQLite file, so backup = a consistent snapshot of data/kaiwa.db.
 Snapshots use the SQLite backup API, so they're safe while the app is writing.
 """
@@ -73,10 +73,11 @@ def restore_from(data: bytes) -> str | None:
                      con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         finally:
             con.close()
-        if not {"profile", "sessions", "vocab"} <= names:
+        if not {"profile", "sessions", "messages"} <= names:
             return "That database is missing Kaiwa's tables — is it really a Kaiwa backup?"
         snapshot_to(db.DB_PATH + ".pre-restore")  # safety copy of what's being replaced
         shutil.move(tmp, db.DB_PATH)
+        db.init()  # bring older backups up to the current schema
         _sanitize_cross_platform()
         return None
     except Exception as e:  # noqa: BLE001 — surfaced to the user

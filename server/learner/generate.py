@@ -38,6 +38,18 @@ REPLY_SCHEMA = {
 }
 
 
+def create_message(client, model: str, **kwargs):
+    """messages.create with server-side refusal fallback where the model supports it."""
+    if model in FALLBACK_MODELS:
+        resp = client.beta.messages.create(
+            model=model, betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+    else:
+        resp = client.messages.create(model=model, **kwargs)
+    if resp.stop_reason == "refusal":
+        raise RuntimeError(f"model refused: {getattr(resp, 'stop_details', None)}")
+    return resp
+
+
 def load_scenarios() -> dict:
     with open(os.path.join(grammar.CONTENT, "scenarios", "phase1.yaml"), encoding="utf-8") as f:
         return {s["id"]: s for s in yaml.safe_load(f)["scenarios"]}
@@ -101,7 +113,8 @@ def scenario_prompt(scenario: dict) -> str:
             f"Your role: {scenario['ai_role']}\n"
             f"The learner's role: {scenario['user_role']}\n"
             f"Goal of the conversation: {scenario['goal']}\n"
-            "Stay in the scene and move it toward the goal.")
+            "Stay in the scene and move it toward the goal."
+            + "".join(f"\n{n}" for n in scenario.get("notes", [])))
 
 
 def repair_message(drafts: list) -> str:
@@ -170,22 +183,15 @@ class Partner:
         self.history.append({"role": "user", "content": text})
 
     def _draft(self, extra: list) -> dict:
-        kwargs = dict(
-            model=self.model,
+        resp = create_message(
+            self.client, self.model,
             max_tokens=4000,
             system=self.system,
             messages=self.history + extra,
             output_config={"effort": self.effort,
                            "format": {"type": "json_schema", "schema": REPLY_SCHEMA}},
         )
-        if self.model in FALLBACK_MODELS:
-            resp = self.client.beta.messages.create(
-                betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
-        else:
-            resp = self.client.messages.create(**kwargs)
         self.usage.add(resp.usage)
-        if resp.stop_reason == "refusal":
-            raise RuntimeError(f"model refused: {getattr(resp, 'stop_details', None)}")
         text = next((b.text for b in resp.content if b.type == "text"), "")
         try:
             return json.loads(text)

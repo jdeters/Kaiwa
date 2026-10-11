@@ -216,18 +216,6 @@ def _annotate_line(text: str) -> list:
     return out
 
 
-def kanji_to_kana(text: str) -> str:
-    """Rewrite kanji words as their hiragana readings (hiragana-only script mode —
-    small local models can't be trusted to obey 'no kanji' on their own)."""
-    out = []
-    for surface, kana, pos in _tokenize(text):
-        if has_kanji(surface) and kana:
-            out.append(kata_to_hira(kana))
-        else:
-            out.append(surface)
-    return "".join(out)
-
-
 def lemma_of(word: str) -> str | None:
     """Dictionary form of the (first word in) `word`, e.g. 食べ → 食べる."""
     _init_backend()

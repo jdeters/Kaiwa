@@ -12,16 +12,7 @@ import json
 import os
 import sys
 
-from . import grammar
-
-
-def _load_env():
-    path = os.path.join(grammar.ROOT, ".env")
-    if os.path.exists(path):
-        for line in open(path, encoding="utf-8"):
-            if "=" in line and not line.lstrip().startswith("#"):
-                k, v = line.strip().split("=", 1)
-                os.environ.setdefault(k, v)
+from .. import llm
 
 
 def cmd_build(args):
@@ -51,7 +42,7 @@ def cmd_check(args):
 
 
 def cmd_chat(args):
-    from . import generate, validator
+    from . import generate
     from .profile import Profile
     p = Profile.load()
     scenarios = generate.load_scenarios()
@@ -94,7 +85,7 @@ def cmd_eval(args):
 
 
 def main():
-    _load_env()
+    llm.load_env()
     ap = argparse.ArgumentParser(prog="python -m server.learner")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("build").set_defaults(fn=cmd_build)

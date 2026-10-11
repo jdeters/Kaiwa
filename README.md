@@ -1,189 +1,92 @@
-<div align="center">
+# Kaiwa 会話 — conversation practice within what you've learned
 
-<img src="docs/cover.jpg" alt="Kaiwa! 会話 — Your Private Japanese Conversation Tutor" width="100%">
+A Japanese conversation partner that only uses the vocabulary and grammar you
+actually know. It reads your Anki decks and your textbook progress, and every
+reply is checked against them before you see it.
 
-**Your private Japanese tutor — chat, voice calls, roleplay, corrections, and spaced repetition, running entirely on your own computer.**
+- **Your vocabulary**: imported from Anki through AnkiConnect: the cards you've
+  studied, plus every word from the textbook lessons you've finished.
+- **Your grammar**: unlocked lesson by lesson from a textbook mapping
+  (currently *Japanese for Busy People I*, Revised 4th Edition, Kana Version).
+- **Checked replies**: Claude drafts each reply. A checker (UniDic morphology
+  plus grammar rules) rejects anything outside what you know, and Claude
+  rewrites it with specific feedback.
+- **Kanji you can read**: words are shown in kanji only if you've learned their
+  kanji in Anki (Core 2000); everything else is shown in hiragana.
 
-[![Release](https://img.shields.io/github/v/release/yeshsanchez/Kaiwa)](https://github.com/yeshsanchez/Kaiwa/releases/latest)
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
-![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
-![Local first](https://img.shields.io/badge/AI-100%25%20local%20by%20default-success)
+Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. Also:
+corrections of what you write, suggested replies (filtered to what you could
+say), translations, tap-a-word lookups, session reports, and progress tracking.
 
-</div>
+## Setup
 
-No subscriptions. No account. Your conversations never leave your machine
-(unless *you* plug in a cloud AI key — see [Choose your AI](#choose-your-ai)).
-
-## Get it
-
-### Install (recommended — no terminal)
-
-Download the installer for your OS from the **[latest release](https://github.com/yeshsanchez/Kaiwa/releases/latest)**:
-
-- **macOS** — open **`Kaiwa-macos.dmg`** and drag Kaiwa into Applications.
-  (Intel build; runs on Apple Silicon via Rosetta.) First launch needs one
-  extra click — see [Opening it the first time on macOS](#opening-it-the-first-time-on-macos).
-- **Windows** — run **`Kaiwa-Setup.exe`** and follow the prompts.
-
-Offline speech-to-text (whisper.cpp), VOICEVOX voices, and the JMdict
-dictionary are **bundled** — nothing else to download. The only external piece
-is the local AI: on first launch an onboarding wizard sets up **Ollama** for
-you, checks your hardware, recommends a model that will actually be responsive
-on it, and takes ~30s to warm up.
-
-### Opening it the first time on macOS
-
-The Mac app is **ad-hoc signed** (not notarized by Apple), so on first launch
-Gatekeeper will refuse to open it — *"Apple cannot check it for malicious
-software."* This is normal for a free, independently distributed app. Open it
-with any one of these (you only do it once):
-
-- **Right-click (or Control-click) the app → Open**, then click **Open** in the
-  dialog. macOS remembers the choice and opens it normally after that.
-- Or double-click it, dismiss the warning, then go to **System Settings →
-  Privacy & Security**, scroll down, and click **Open Anyway** next to the
-  Kaiwa message.
-- Or from Terminal, clear the quarantine flag:
-  `xattr -dr com.apple.quarantine /Applications/Kaiwa.app`
-  (point it at wherever you put the app / .dmg).
-
-### From source (developers)
-
-`git clone` this repo instead (`main` is the stable release; work happens on
-short-lived feature branches off it) — then:
-
-**macOS**
 ```bash
-./setup.sh    # venv + dependencies + speech model + dictionary (~600 MB)
-./run.sh      # starts everything → http://localhost:8130
-```
-Voice input additionally needs whisper.cpp: `brew install whisper-cpp`
-
-**Windows** — in PowerShell:
-```powershell
-.\setup.ps1
-.\run.ps1     # → http://localhost:8130
+./setup.sh                                  # Python env + dependencies
+echo "ANTHROPIC_API_KEY=sk-ant-…" > .env     # or paste it in Settings later
 ```
 
-This path needs [Ollama](https://ollama.com) installed separately (the free
-local AI that powers Kaiwa by default). First launch opens the same onboarding
-wizard: it checks your hardware, recommends a responsive model, and warms up in
-~30s.
+Install [Anki](https://apps.ankiweb.net) with the
+[AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on, keep Anki
+open, and build your learner profile:
 
-## What it does
+```bash
+.venv/bin/python -m server.learner build
+```
 
-| Feature | How |
+The first build creates `data/learner.yaml` from
+[content/learner.example.yaml](content/learner.example.yaml). Edit it to match
+your decks and the textbook lesson you've reached, then build again. Rebuild
+whenever you've studied more.
+
+```bash
+./run.sh            # → http://localhost:8130
+```
+
+## How it works
+
+| Piece | Where |
 |---|---|
-| 💬 **Free Chat** | Natural conversation with Kaiwa, your AI tutor, at your JLPT level (N5–N1) |
-| 📞 **Voice Call** | Real-time spoken conversation — just talk, no typing |
-| 🎬 **36 roleplay scenarios** | Ramen shop, job interview, izakaya, kōban, ryokan… |
-| 🎭 **Custom roleplay** | Define any scene, any roles |
-| 📖 **10 guided lessons** | Structured mini-lessons (greetings → keigo) |
-| ✏️ **Live corrections** | Every message checked; mistakes explained in English & remembered — and correctly-used advanced kanji gets praised, not "corrected" |
-| 💡 **Hints** | Stuck? Get 3 suggested replies at your level |
-| ふ **Furigana / romaji / translation** | Toggle per conversation, tap any word for its meaning |
-| 📚 **Dictionary** | JMdict (490k+ entries) — tap words in chat, or search Japanese/English in the Dictionary tab. Fully offline |
-| 🃏 **SRS review** | Anki-style spaced repetition — grade buttons show exactly when each word comes back |
-| 📝 **Session reports** | Summary, strengths, focus areas — expandable in Progress, savable as PDF |
-| 📈 **Progress** | Streaks, minutes practiced, mistake patterns |
-| 🧠 **Memory** | Your recent mistakes & words feed back into the tutor's brain |
-| 💾 **Backups** | Automatic daily/weekly backups + one-click export/import — moves cleanly between macOS and Windows |
+| Grammar concepts (textbook-independent) | [content/grammar/concepts.yaml](content/grammar/concepts.yaml) |
+| Textbook lesson → concept mapping | [content/textbooks/](content/textbooks/) |
+| Anki import, learner profile | [server/learner/profile.py](server/learner/profile.py) |
+| Grammar detection, checker | [server/learner/grammar.py](server/learner/grammar.py), [validator.py](server/learner/validator.py) |
+| Draft → check → repair loop | [server/learner/generate.py](server/learner/generate.py) |
+| Kana/kanji display | [server/learner/display.py](server/learner/display.py) |
+| Web app | [server/main.py](server/main.py), [web/](web/) |
 
-## Choose your AI
+Command-line tools:
 
-Kaiwa works with either:
-
-- **Local AI (default)** — [Ollama](https://ollama.com) running a small model on
-  your computer. Free, 100% private, works offline. The first-run wizard checks
-  your hardware and recommends a model that will actually be responsive on it.
-  Realistic minimum: ~8 GB RAM; a CPU-only machine runs a 4B model at
-  conversational (not instant) speed.
-- **Cloud AI (optional)** — paste an API key for **Google Gemini** (has a free
-  tier), **OpenAI**, or **Anthropic Claude** in Settings. Much faster and
-  smarter; your messages go to that provider. Keys are stored only in your
-  local database and are never shown to the browser again.
-
-Speech recognition, speech synthesis, the dictionary, and all your data stay
-local either way.
-
-### Better voices (optional)
-
-Out of the box Kaiwa speaks with your OS's built-in Japanese voice. For much
-nicer voices, download the [VOICEVOX engine](https://github.com/VOICEVOX/voicevox_engine/releases)
-(CPU build for your OS) and unzip it into `vendor/` (e.g. `vendor/macos-x64/`
-so that `vendor/macos-x64/run` exists). `run.sh` picks it up automatically, and
-a voice picker (with preview) appears in Settings. Every VOICEVOX character ×
-emotion style (sweet, tsundere, whisper…) shows up there, and the
-**Expressiveness** slider in Settings makes any of them swing harder.
-
-### Anime-style voices (optional)
-
-For the most natural, emotional voices, install [AivisSpeech](https://aivis-project.com/)
-(free, Windows/macOS) and add character voice models from
-[AivisHub](https://hub.aivis-project.com/) inside the app — 60+ free
-anime-style voices. Its engine speaks the VOICEVOX API, so Kaiwa detects it
-automatically (`run.sh` even starts it for you if installed) and its voices
-appear in the same Settings picker. Heads-up: it's a heavier model than
-VOICEVOX — on older CPU-only machines each sentence takes a few seconds to
-synthesize (cached after the first time). Headless alternative: unzip
-[AivisSpeech-Engine](https://github.com/Aivis-Project/AivisSpeech-Engine/releases)
-into `vendor/aivisspeech-engine/`.
-
-## Use it on your phone 📱
-
-Your computer does all the AI work; the phone is just a screen. The free
-[Tailscale](https://tailscale.com) app connects them securely from anywhere:
-
-1. Install Tailscale on this computer and sign in
-2. Install Tailscale on your phone, sign in with the **same account**
-3. Restart Kaiwa (`./run.sh`), open **Settings → On your phone**, and scan the QR code
-4. On the phone: Share → **Add to Home Screen** → Kaiwa installs like a real app
-
-Why not plain Wi-Fi? Phone browsers block the microphone on insecure HTTP —
-Tailscale provides the HTTPS link that makes voice work.
+```bash
+.venv/bin/python -m server.learner check "昨日、映画を見ました。"   # check a sentence
+.venv/bin/python -m server.learner chat cafe -v                   # text chat in the terminal
+.venv/bin/python -m server.learner eval                           # compliance/latency/cost evaluation
+.venv/bin/python -m pytest tests/
+```
 
 ## Your data
 
-Everything lives in one file: `data/kaiwa.db`. In **Settings → Your data** you
-can export it, import it on a new machine (macOS ↔ Windows both ways), turn on
-automatic daily/weekly backups (kept in `~/Documents/Kaiwa Backups`, last 8
-rotated), or reset everything for a fresh start. Tip: point your backups at a
-folder inside iCloud Drive/Dropbox and they sync off-machine too.
+Sessions, corrections, and settings live in `data/kaiwa.db`; your learner
+profile is `data/learner_profile.json`. Settings → Your data handles export,
+import, and automatic backups. Your messages are sent to Anthropic's API to
+generate replies.
 
-## Configuration
+## Credits & licenses
 
-| Env var | Default | What |
-|---|---|---|
-| `KAIWA_PORT` | `8130` | Web app port |
-| `KAIWA_OLLAMA_URL` | `http://localhost:11434` | Ollama server |
-
-Logs land in `/tmp/ollama.log` and `/tmp/voicevox.log`.
-
-## The stack
-
-FastAPI + SQLite + vanilla JS (no build step). STT: whisper.cpp. TTS: VOICEVOX,
-AivisSpeech, macOS `say`, or Windows SAPI. Tokenizer/furigana: fugashi (UniDic).
-LLM: Ollama or Gemini/OpenAI/Anthropic over plain HTTP.
-
-## Contributing
-
-Issues and PRs welcome — branch off `main`. If Kaiwa helps your Japanese, a ⭐
-helps other learners find it.
-
-## Credits & data licenses
+Built on [Kaiwa](https://github.com/yeshsanchez/Kaiwa) by yeshsanchez
+(AGPL-3.0); this fork keeps that license.
 
 - Dictionary data from [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html)
   (via [jmdict-simplified](https://github.com/scriptin/jmdict-simplified)),
   property of the [EDRDG](https://www.edrdg.org/), used under
   [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
-- [VOICEVOX](https://voicevox.hiroshiba.jp/) — generated audio must be credited
+- Morphological analysis: [fugashi](https://github.com/polm/fugashi) + UniDic
+- [VOICEVOX](https://voicevox.hiroshiba.jp/): generated audio must be credited
   per each voice library's terms (e.g. `VOICEVOX:四国めたん`)
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (MIT),
-  [Ollama](https://ollama.com) (MIT)
+- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (MIT)
 - Icons: [Lucide](https://lucide.dev) (ISC) ·
   QR: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT)
 
 ## License
 
-[AGPL-3.0](LICENSE) — free to use, modify, and share; if you run a modified
-version as a service, you must share your changes.
+[AGPL-3.0](LICENSE). If you run a modified version as a service, you must share
+your changes.

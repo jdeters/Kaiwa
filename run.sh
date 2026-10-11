@@ -1,26 +1,18 @@
 #!/bin/bash
-# Kaiwa launcher — starts Ollama, VOICEVOX (if installed), and the app server.
+# Kaiwa launcher — starts the voice engines (if installed) and the app server.
 set -e
 cd "$(dirname "$0")"
 
-echo "🗣️  Kaiwa — local Japanese tutor"
+echo "🗣️  Kaiwa — Japanese conversation practice"
 PORT="${KAIWA_PORT:-8130}"
 
 # first run without setup? be helpful
 [ -d .venv ] || { echo "✗ run ./setup.sh first"; exit 1; }
 
-# 1. Ollama
-if ! curl -s --max-time 2 http://localhost:11434/api/version >/dev/null; then
-  echo "▶ starting ollama…"
-  (ollama serve >/tmp/ollama.log 2>&1 &)
-  for i in $(seq 1 20); do
-    curl -s --max-time 1 http://localhost:11434/api/version >/dev/null && break
-    sleep 1
-  done
-fi
-echo "✓ ollama running"
+[ -f data/learner_profile.json ] || \
+  echo "⚠ no learner profile yet — with Anki open, run: .venv/bin/python -m server.learner build"
 
-# 2. VOICEVOX (optional, better voices)
+# 1. VOICEVOX (optional, better voices)
 if [ -x "vendor/macos-x64/run" ]; then
   if ! curl -s --max-time 2 http://127.0.0.1:50021/version >/dev/null; then
     echo "▶ starting VOICEVOX engine (takes ~20s)…"
@@ -28,7 +20,7 @@ if [ -x "vendor/macos-x64/run" ]; then
   fi
 fi
 
-# 2b. AivisSpeech (optional — emotional / anime-style voices, VOICEVOX-compatible API)
+# 1b. AivisSpeech (optional — emotional / anime-style voices, VOICEVOX-compatible API)
 if ! curl -s --max-time 2 http://127.0.0.1:10101/version >/dev/null; then
   AIVIS="vendor/aivisspeech-engine/run"
   [ -x "$AIVIS" ] || AIVIS=$(find /Applications/AivisSpeech.app -maxdepth 5 -name run -type f 2>/dev/null | head -1)
@@ -38,15 +30,16 @@ if ! curl -s --max-time 2 http://127.0.0.1:10101/version >/dev/null; then
   fi
 fi
 
-# 3. Tailscale HTTPS link (optional — lets your phone reach Kaiwa from anywhere)
-TS="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+# 2. Tailscale HTTPS link (optional — lets your phone reach Kaiwa from anywhere)
+TS=$(command -v tailscale || echo "/Applications/Tailscale.app/Contents/MacOS/Tailscale")
 if [ -x "$TS" ] && "$TS" status >/dev/null 2>&1; then
   "$TS" serve --bg "$PORT" >/dev/null 2>&1 || true
   TSHOST=$("$TS" status --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null)
   [ -n "$TSHOST" ] && echo "📱 phone link: https://$TSHOST"
 fi
 
-# 4. App server (0.0.0.0 so phones on the network can connect)
+# 3. App server (0.0.0.0 so phones on the network can connect)
 echo "▶ starting Kaiwa at http://localhost:$PORT"
-(sleep 2 && open "http://localhost:$PORT") &
+OPEN=$(command -v xdg-open || command -v open || true)
+[ -n "$OPEN" ] && (sleep 2 && "$OPEN" "http://localhost:$PORT" >/dev/null 2>&1) &
 exec .venv/bin/python -m uvicorn server.main:app --host 0.0.0.0 --port "$PORT"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kaiwa one-time setup: Python env, dependencies, speech model, dictionary.
+# One-time setup: Python env, dependencies, speech model, dictionary.
 set -e
 cd "$(dirname "$0")"
 
@@ -44,4 +44,8 @@ if ! command -v whisper-cli >/dev/null 2>&1; then
   echo "⚠ voice input needs whisper.cpp:  brew install whisper-cpp"
 fi
 
-echo "✓ setup complete — start Kaiwa with ./run.sh"
+echo "✓ setup complete. Next:"
+echo "  1. Put ANTHROPIC_API_KEY=… in .env (or paste the key in Settings later)"
+echo "  2. With Anki + AnkiConnect running: .venv/bin/python -m server.learner build"
+echo "     (edit data/learner.yaml for your decks and textbook lesson, then build again)"
+echo "  3. ./run.sh"

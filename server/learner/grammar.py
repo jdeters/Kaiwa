@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from .morph import Tok
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONTENT = os.path.join(ROOT, "content")

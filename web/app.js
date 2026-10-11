@@ -11,7 +11,7 @@ const api = {
 };
 
 const icon = (n, cls = "") => `<svg class="icon ${cls}"><use href="/static/icons.svg#${n}"/></svg>`;
-/* scenario/lesson id → Lucide icon */
+/* scenario id → Lucide icon */
 const ICON_MAP = {
   ramen: "soup", izakaya: "beer", cafe: "coffee", sushi: "fish", konbini: "store",
   airport: "plane", train: "train-front", hotel: "hotel", directions: "map",
@@ -22,9 +22,6 @@ const ICON_MAP = {
   phone_call: "phone", friends: "handshake", karaoke: "mic-vocal", date: "heart",
   festival: "sparkles", doctor: "stethoscope", pharmacy: "pill", lost: "shield-alert",
   bank: "landmark", post: "mailbox", apartment: "house", phone_contract: "signal",
-  greetings: "sunrise", self_intro: "user-round", numbers_shopping: "calculator",
-  time_dates: "clock", likes_dislikes: "thumbs-up", daily_routine: "sun",
-  past_tense: "calendar", te_form: "link", feelings: "smile", keigo_basics: "award",
 };
 
 const state = {
@@ -42,8 +39,6 @@ function show(view) {
   $(`#view-${view}`).classList.remove("hidden");
   $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   if (view === "home") loadHome();
-  if (view === "review") loadReview();
-  if (view === "vocab") loadVocab();
   if (view === "dict") $("#dict-search").focus();
   if (view === "progress") loadProgress();
   if (view === "settings") loadSettings();
@@ -52,17 +47,15 @@ function show(view) {
 $$(".nav-btn").forEach(b => b.addEventListener("click", () => show(b.dataset.view)));
 
 /* an active chat isn't lost when you switch tabs — tap the pill to get back */
-const sessionView = () =>            // story sessions live in the reader, not chat
-  state.session && state.session.mode === "story" ? "reader" : "chat";
 const sessionTitle = () =>
   (state.session && state.session.scenario && state.session.scenario.title) ||
   $("#chat-title").textContent;
 function updateResumePill(view) {
   const active = state.session && state.session.mode !== "call";
-  $("#resume-pill").classList.toggle("hidden", !(active && view !== sessionView()));
+  $("#resume-pill").classList.toggle("hidden", !(active && view !== "chat"));
   if (active) $("#resume-title").textContent = sessionTitle();
 }
-$("#resume-pill").addEventListener("click", () => show(sessionView()));
+$("#resume-pill").addEventListener("click", () => show("chat"));
 
 /* starting a new session over an active one asks first (report / discard / stay) */
 let pendingStart = null;
@@ -74,7 +67,7 @@ function guardActiveSession(startFn) {
 $("#switch-cancel").addEventListener("click", () => {
   pendingStart = null;
   $("#switch-modal").classList.add("hidden");
-  show(sessionView());
+  show("chat");
 });
 $("#switch-skip").addEventListener("click", () => {
   $("#switch-modal").classList.add("hidden");
@@ -95,160 +88,39 @@ async function boot() {
   setInterval(updateHealth, 20000);
   if (!state.profile.name) startOnboarding();
   loadHome();
-  refreshDueBadge();
 }
 
 async function updateHealth() {
   try {
     const h = await api.get("/api/health");
     const dot = ok => `<span class="${ok ? "ok" : "bad"}">●</span>`;
-    const llmLabel = h.provider === "ollama"
-      ? (h.model ? h.model.split(":")[0] : "—")
-      : (h.provider_label || h.provider);
     $("#health").innerHTML =
-      `${dot(h.llm_ready)} LLM ${llmLabel}<br>` +
+      `${dot(h.claude)} Claude ${h.model.replace("claude-", "")}<br>` +
+      `${dot(h.learner.available)} ${h.learner.available ? `lesson ${h.learner.lesson} profile` : "no learner profile"}<br>` +
       `${dot(h.whisper)} whisper (voice in)<br>` +
       `${dot(h.voicevox || h.aivis)} ${[h.aivis && "Aivis", h.voicevox && "VOICEVOX"].filter(Boolean).join(" + ") || "macOS voice"} (voice out)`;
+    updateSetupBanner(h);
   } catch { $("#health").innerHTML = `<span class="bad">●</span> server offline`; }
 }
 
-async function refreshDueBadge() {
-  const d = await api.get("/api/srs/due");
-  const n = d.due.length;
-  const b = $("#due-badge");
-  b.classList.toggle("hidden", n === 0);
-  b.textContent = n;
+/* what's missing before you can practice: a learner profile and an API key */
+function updateSetupBanner(h) {
+  const missing = [];
+  if (!h.learner.available) missing.push(esc(h.learner.reason));
+  if (!h.claude) missing.push("No Anthropic API key — add one in Settings (or ANTHROPIC_API_KEY in .env).");
+  const b = $("#setup-banner");
+  b.classList.toggle("hidden", !missing.length);
+  b.innerHTML = missing.map(m => `${icon("shield-alert")} ${m}`).join("<br>");
 }
 
 /* ============================================================ onboarding */
-function obShow(step) { // "ai" | "profile"
-  $("#ob-step-ai").classList.toggle("hidden", step !== "ai");
-  $("#ob-step-profile").classList.toggle("hidden", step !== "profile");
-}
-
-async function startOnboarding() {
+function startOnboarding() {
   $("#onboard-modal").classList.remove("hidden");
-  try {
-    const h = await api.get("/api/health");
-    obShow(h.llm_ready ? "profile" : "ai"); // AI already working → skip straight to profile
-  } catch { obShow("profile"); }
 }
-
-/* --- step 0: pick + set up the AI --- */
-let obPoll = null;
-function obPanel(name) { // "choice" | "local" | "cloud"
-  $("#ob-ai-choice").classList.toggle("hidden", name !== "choice");
-  $("#ob-local").classList.toggle("hidden", name !== "local");
-  $("#ob-cloud").classList.toggle("hidden", name !== "cloud");
-  $("#ob-ai-back-row").classList.toggle("hidden", name === "choice");
-  if (name !== "local" && obPoll) { clearInterval(obPoll); obPoll = null; }
-}
-$("#ob-opt-local").addEventListener("click", () => { obPanel("local"); obLocalCheck(); });
-$("#ob-opt-cloud").addEventListener("click", () => { obPanel("cloud"); obCloudInit(); });
-$("#ob-ai-back").addEventListener("click", () => obPanel("choice"));
-
-async function obLocalCheck() {
-  const h = await api.get("/api/health");
-  if (!h.ollama) {
-    $("#ob-ollama-missing").classList.remove("hidden");
-    $("#ob-model-dl").classList.add("hidden");
-    if (!obPoll) obPoll = setInterval(obLocalCheck, 3000); // watch for Ollama appearing
-    return;
-  }
-  if (obPoll) { clearInterval(obPoll); obPoll = null; }
-  $("#ob-ollama-missing").classList.add("hidden");
-  if (h.models.length) { // a model is already installed — nothing to download
-    await api.post("/api/settings", { provider: "ollama" });
-    updateHealth();
-    obShow("profile");
-    return;
-  }
-  const hw = await api.get("/api/setup/hardware");
-  const r = hw.recommended;
-  $("#ob-hw-note").textContent =
-    `Your ${hw.system === "Darwin" ? "Mac" : "computer"} (${hw.cores} cores, ${hw.ram_gb ?? "?"} GB RAM) — ` +
-    `recommended model: ${r.model} (${r.size} download). ${r.reason}`;
-  $("#ob-model-dl").classList.remove("hidden");
-  $("#ob-pull-btn").onclick = () => obPull(r.model);
-}
-
-async function obPull(model) {
-  $("#ob-pull-btn").disabled = true;
-  $("#ob-pull-progress").classList.remove("hidden");
-  const status = $("#ob-pull-status"), fill = $("#ob-pull-fill");
-  try {
-    const resp = await fetch("/api/setup/pull", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model }),
-    });
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "", ok = false;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split("\n\n"); buf = lines.pop();
-      for (const l of lines) {
-        if (!l.startsWith("data: ")) continue;
-        const d = JSON.parse(l.slice(6));
-        if (d.error) throw new Error(d.error);
-        if (d.total && d.completed != null) {
-          const pct = Math.round(d.completed / d.total * 100);
-          fill.style.width = pct + "%";
-          status.textContent = `Downloading — ${pct}%`;
-        } else if (d.status) status.textContent = d.status;
-        if (d.status === "success") ok = true;
-      }
-    }
-    if (!ok) throw new Error("download did not finish — is Ollama still running?");
-    fill.style.width = "100%";
-    status.textContent = "Done! Your tutor is ready.";
-    await api.post("/api/settings", { provider: "ollama", model });
-    updateHealth();
-    setTimeout(() => obShow("profile"), 800);
-  } catch (e) {
-    status.textContent = "Download failed: " + e.message;
-    $("#ob-pull-btn").disabled = false;
-  }
-}
-
-/* --- step 0, cloud path --- */
-const OB_KEY_HINTS = {
-  gemini: "Free tier available — create a key at aistudio.google.com/apikey",
-  openai: "Create a key at platform.openai.com/api-keys",
-  anthropic: "Create a key at console.anthropic.com",
-};
-async function obCloudInit() {
-  const cat = await api.get("/api/providers");
-  $("#ob-provider").innerHTML = cat.providers.filter(p => p.needs_key)
-    .map(p => `<option value="${p.id}">${p.label}</option>`).join("");
-  const hint = () => { $("#ob-key-hint").textContent = OB_KEY_HINTS[$("#ob-provider").value] || ""; };
-  $("#ob-provider").onchange = hint;
-  hint();
-}
-$("#ob-cloud-save").addEventListener("click", async () => {
-  const prov = $("#ob-provider").value;
-  const key = $("#ob-apikey").value.trim();
-  if (!key) { $("#ob-apikey").focus(); return; }
-  const patch = { provider: prov };
-  patch[`api_key_${prov}`] = key;
-  await api.post("/api/settings", patch);
-  updateHealth();
-  obShow("profile");
-});
-
-/* --- step 1: profile --- */
-$("#ob-level").addEventListener("click", e => {
-  const btn = e.target.closest("button"); if (!btn) return;
-  $$("#ob-level button").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-});
 $("#ob-start").addEventListener("click", async () => {
   const name = $("#ob-name").value.trim() || "friend";
-  const level = $("#ob-level .active")?.dataset.l || "N5";
   const interests = $("#ob-interests").value.trim();
-  state.profile = await api.put("/api/profile", { name, jlpt_level: level, interests });
+  state.profile = await api.put("/api/profile", { name, interests });
   $("#onboard-modal").classList.add("hidden");
   loadHome();
 });
@@ -263,56 +135,30 @@ async function loadHome() {
   api.get("/api/dashboard").then(d => {
     $("#home-stats").innerHTML =
       `<div class="chip">${icon("flame", "accent")} ${d.streak} day streak</div>` +
-      `<div class="chip">${icon("timer")} ${d.total_minutes} min</div>` +
-      `<div class="chip">${icon("book-open")} ${d.words_saved} words</div>`;
-    const banner = $("#srs-banner");
-    if (d.srs_due > 0) {
-      banner.classList.remove("hidden");
-      banner.innerHTML = `${icon("layers")} <b>${d.srs_due} word${d.srs_due > 1 ? "s" : ""}</b> ready for review — keep them fresh!`;
-      banner.onclick = () => show("review");
-    } else banner.classList.add("hidden");
+      `<div class="chip">${icon("timer")} ${d.total_minutes} min</div>`;
   });
 
   if (!state.catalog) state.catalog = await api.get("/api/scenarios");
-  const { scenarios, lessons } = state.catalog;
-
-  $("#lessons-row").innerHTML = lessons.map(scenCard).join("");
+  const { scenarios } = state.catalog;
   const cats = {};
   scenarios.forEach(s => (cats[s.category] ||= []).push(s));
   $("#scenario-cats").innerHTML = Object.entries(cats).map(([cat, list]) =>
     `<div class="cat-title">${cat}</div><div class="scen-grid">${list.map(scenCard).join("")}</div>`
   ).join("");
 
-  $$("#lessons-row .scen-card, #scenario-cats .scen-card").forEach(c =>
-    c.addEventListener("click", () => startSession(
-      c.dataset.kind === "lesson" ? "lesson" : "roleplay", { scenario_id: c.dataset.id }))
-  );
+  $$("#scenario-cats .scen-card").forEach(c =>
+    c.addEventListener("click", () => startSession("roleplay", { scenario_id: c.dataset.id })));
 }
 
 function scenCard(s) {
-  return `<div class="scen-card" data-id="${s.id}" data-kind="${s.kind}">
+  return `<div class="scen-card" data-id="${s.id}">
     <span class="scen-icon">${icon(ICON_MAP[s.id] || "message-circle")}</span>
-    <h4>${s.title}</h4><span class="ja">${s.title_ja}</span>
-    <p>${s.description}</p><span class="lv">${s.levels}</span>
+    <h4>${esc(s.title)}</h4><p>${esc(s.description)}</p>
   </div>`;
 }
 
 $("#card-free").addEventListener("click", () => startSession("free_chat", {}));
 $("#card-custom").addEventListener("click", () => $("#custom-modal").classList.remove("hidden"));
-$("#card-story").addEventListener("click", () => $("#story-modal").classList.remove("hidden"));
-$("#st-cancel").addEventListener("click", () => $("#story-modal").classList.add("hidden"));
-$("#st-script").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return;
-  $$("#st-script button").forEach(x => x.classList.remove("active"));
-  b.classList.add("active");
-});
-$("#st-start").addEventListener("click", () => {
-  $("#story-modal").classList.add("hidden");
-  startSession("story", { story: {
-    topic: $("#st-topic").value.trim(),
-    script: $("#st-script .active")?.dataset.s || "normal",
-  }});
-});
 $("#cr-cancel").addEventListener("click", () => $("#custom-modal").classList.add("hidden"));
 $("#cr-start").addEventListener("click", () => {
   const custom = {
@@ -329,7 +175,6 @@ async function startSession(mode, opts) {
   if (state.session) return guardActiveSession(() => startSession(mode, opts));
   const res = await api.post("/api/sessions", { mode, ...opts });
   state.session = { ...res, mode };
-  if (mode === "story") return openReader(res);   // stories get the book UI
   const scen = res.scenario;
   $("#chat-title").textContent = scen ? `${scen.title}` : "Free Chat 💬";
   $("#chat-sub").textContent = scen ? (scen.setting || scen.description || "") : "Talk about anything!";
@@ -369,7 +214,7 @@ function renderTokens(tokens) {
 }
 const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/* shared SSE pump for /api/chat — chat bubbles and the story reader both use it */
+/* SSE pump for /api/chat (the voice call has its own, sentence-by-sentence) */
 async function streamChat(text, h) {
   const resp = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -392,7 +237,9 @@ async function streamChat(text, h) {
       if (ev.user_message_id && h.onUser) h.onUser(ev.user_message_id);
       if (ev.error) { h.onError(ev.error); return; }
       if (ev.delta) { raw += ev.delta; h.onDelta(raw); }
-      if (ev.done) h.onDone(ev, raw);
+      // learner-constrained replies arrive whole: `speak` is the kanji original
+      // (for TTS and lookups); the bubble renders ev.tokens (known kanji only)
+      if (ev.done) h.onDone(ev, ev.speak || raw);
     }
   }
 }
@@ -544,212 +391,16 @@ async function showSessionSummary() {
     <p>${esc(s.summary || "")}</p>
     ${s.strengths?.length ? `<h3 class="sect">${icon("trophy")} Strengths</h3><ul class="sum-list">${s.strengths.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     ${s.areas_to_improve?.length ? `<h3 class="sect">${icon("target")} Work on next</h3><ul class="sum-list">${s.areas_to_improve.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    ${s.new_words?.length ? `<h3 class="sect">${icon("sparkles")} Words worth saving</h3>` + s.new_words.map((w, i) =>
+    ${s.new_words?.length ? `<h3 class="sect">${icon("sparkles")} Words worth learning</h3>` + s.new_words.map(w =>
       `<div class="new-word-row"><span class="w">${esc(w.word || "")}</span>
-       <span class="r">${esc(w.reading || "")}</span><span class="m">${esc(w.meaning || "")}</span>
-       <button data-i="${i}">${icon("plus")} Save</button></div>`).join("") : ""}
+       <span class="r">${esc(w.reading || "")}</span><span class="m">${esc(w.meaning || "")}</span></div>`).join("") : ""}
     <div class="modal-btns"><button class="btn primary" id="sum-close">Done ✓</button></div>`;
-  $$(".new-word-row button", inner).forEach(btn => btn.addEventListener("click", async () => {
-    const w = s.new_words[+btn.dataset.i];
-    await api.post("/api/vocab", w);
-    btn.textContent = "✓ Saved"; btn.disabled = true;
-    refreshDueBadge();
-  }));
   $("#sum-close").addEventListener("click", () => {
     $("#summary-modal").classList.add("hidden");
     state.session = null;
     const go = pendingStart; pendingStart = null;
     if (go) go(); else show("home");
   });
-}
-
-/* ========================================================== story reader */
-/* Story mode renders as book pages instead of chat bubbles: page 1 is the
-   story itself, each quiz turn becomes the next page. Same /api/chat session
-   underneath, so resume, reports, and corrections all keep working. */
-const reader = { pages: [], cur: 0 };
-
-/* Hiragana-only stories: the local model sometimes slips katakana in anyway.
-   Convert it deterministically at render time so beginners never hit kana they
-   can't read yet. Text-node only — data-w attributes keep the original surface
-   so word lookups still work. */
-const storyIsHiragana = () => state.session?.scenario?.script === "hiragana";
-const toHiragana = (s) => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
-function hiraganizeEl(el) {
-  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  for (let n = walk.nextNode(); n; n = walk.nextNode()) n.nodeValue = toHiragana(n.nodeValue);
-}
-const TYPING = `<span class="typing"><span></span><span></span><span></span></span>`;
-
-function openReader(res) {
-  const scen = res.scenario || {};
-  $("#reader-title").textContent = scen.title || "Story Time";
-  $("#reader-sub").textContent =
-    ({ hiragana: "ひらがな only", katakana: "カタカナ practice", stretch: "kanji stretch" })[scen.script] || "";
-  reader.pages = []; reader.cur = 0;
-  $("#reader-pages").innerHTML = "";
-  $("#reader-nav").classList.add("hidden");
-  $("#rd-furigana").checked = state.settings.furigana !== false;
-  $("#rd-romaji").checked = !!state.settings.romaji;
-  applyReaderToggles();
-  show("reader");
-  readerStream("", addReaderPage("story"));   // AI opens by writing the story
-}
-
-$("#reader-back").addEventListener("click", () => show("home"));
-$("#reader-end").addEventListener("click", showSessionSummary);
-$("#rd-prev").addEventListener("click", () => readerGo(reader.cur - 1));
-$("#rd-next").addEventListener("click", () => readerGo(reader.cur + 1));
-$("#rd-furigana").addEventListener("change", applyReaderToggles);
-$("#rd-romaji").addEventListener("change", applyReaderToggles);
-function applyReaderToggles() {
-  $("#reader-pages").classList.toggle("no-furigana", !$("#rd-furigana").checked);
-  $("#reader-pages").classList.toggle("show-romaji", $("#rd-romaji").checked);
-}
-
-function addReaderPage(type) {
-  const div = document.createElement("div");
-  div.className = `reader-page ${type}`;
-  if (type === "story") {
-    div.innerHTML = `
-      <h2 class="story-title"></h2>
-      <div class="story-body">${TYPING}</div>
-      <div class="romaji-line"></div><div class="trans-line hidden"></div>
-      <div class="msg-actions reader-actions"></div>
-      <div class="reader-cta hidden"><button class="btn primary">Start the quiz ➤</button></div>`;
-  } else {
-    // story is page 0; quiz pages 1-3 are the questions, 4 is the wrap-up
-    const n = reader.pages.length;
-    const label = n <= 3 ? `Question ${n} <span class="of">/ 3</span>`
-      : n === 4 ? `${icon("party-popper")} Story complete!`
-      : `${icon("message-circle")} Chat`;
-    div.innerHTML = `
-      <div class="quiz-label">${label}</div>
-      <div class="quiz-body">${TYPING}</div>
-      <div class="romaji-line"></div><div class="trans-line hidden"></div>
-      <div class="msg-actions reader-actions"></div>
-      <div class="quiz-after"></div>
-      <div class="quiz-answer hidden">
-        <input type="text" placeholder="${n <= 3 ? "Answer in Japanese…" : "Reply…"}" autocomplete="off">
-        <button class="icon-btn big send" title="Send">${icon("send-horizontal")}</button>
-      </div>`;
-  }
-  $("#reader-pages").appendChild(div);
-  reader.pages.push(div);
-  readerGo(reader.pages.length - 1);
-  return div;
-}
-
-function readerGo(i) {
-  reader.cur = Math.max(0, Math.min(i, reader.pages.length - 1));
-  reader.pages.forEach((p, j) => p.classList.toggle("hidden", j !== reader.cur));
-  $("#reader-pages").scrollTop = 0;
-  updateReaderNav();
-}
-
-function updateReaderNav() {
-  const dots = $("#rd-dots");
-  dots.innerHTML = reader.pages.map((p, j) =>
-    `<button class="rd-dot ${j === reader.cur ? "on" : ""}" data-i="${j}" ` +
-    `title="${j === 0 ? "Story" : "Page " + (j + 1)}">${j === 0 ? icon("book-open") : j}</button>`).join("");
-  $$(".rd-dot", dots).forEach(b => b.addEventListener("click", () => readerGo(+b.dataset.i)));
-  $("#rd-prev").disabled = reader.cur === 0;
-  $("#rd-next").disabled = reader.cur >= reader.pages.length - 1;
-  $("#reader-nav").classList.toggle("hidden", reader.pages.length < 2);
-}
-
-async function readerStream(text, page, correctEl) {
-  if (!state.session) return;
-  state.busy = true;
-  const isStory = page.classList.contains("story");
-  const body = $(isStory ? ".story-body" : ".quiz-body", page);
-  const title = isStory ? $(".story-title", page) : null;
-  let started = false;
-  try {
-    await streamChat(text, {
-      onUser: mid => { if (correctEl) queueCorrection(mid, correctEl); },
-      onError: msg => { body.textContent = "⚠️ " + msg; },
-      onDelta: raw => {
-        if (!started) { body.textContent = ""; started = true; }
-        if (storyIsHiragana()) raw = toHiragana(raw);   // strip stray katakana live
-        if (title) {                     // first line of the story is its title
-          const nl = raw.indexOf("\n");
-          title.textContent = nl >= 0 ? raw.slice(0, nl).trim() : raw;
-          body.textContent = nl >= 0 ? raw.slice(nl + 1).replace(/^\n+/, "") : "";
-        } else body.textContent = raw;
-      },
-      onDone: (ev, raw) => finishReaderPage(page, ev, raw),
-    });
-  } catch (e) { body.textContent = "⚠️ " + e.message; }
-  state.busy = false;
-}
-
-function finishReaderPage(page, ev, raw) {
-  const isStory = page.classList.contains("story");
-  const body = $(isStory ? ".story-body" : ".quiz-body", page);
-  let toks = ev.tokens || [];
-  if (isStory) {
-    const nl = toks.findIndex(t => t.surface === "\n");
-    if (nl > 0) {
-      $(".story-title", page).innerHTML = renderTokens(toks.slice(0, nl));
-      toks = toks.slice(nl + 1);
-      while (toks.length && toks[0].surface === "\n") toks.shift();
-    }
-  }
-  body.innerHTML = renderTokens(toks);
-  if (storyIsHiragana()) {               // safety net: convert any katakana the model left in
-    if (isStory) hiraganizeEl($(".story-title", page));
-    hiraganizeEl(body);
-  }
-  $(".romaji-line", page).textContent = ev.romaji || "";
-
-  const actions = $(".reader-actions", page);
-  actions.innerHTML = `
-    <button class="act-play" title="Play">${icon("volume-2")} Play</button>
-    <button class="act-slow" title="Play slowly">${icon("turtle")} Slow</button>
-    <button class="act-trans" title="Translate">${icon("languages")} Translate</button>`;
-  $(".act-play", actions).addEventListener("click", () => playTTS(raw, 1.0));
-  $(".act-slow", actions).addEventListener("click", () => playTTS(raw, 0.7));
-  $(".act-trans", actions).addEventListener("click", () => translateMsg(ev.message_id, page));
-  $$(".tok", page).forEach(tok =>
-    tok.addEventListener("click", e => wordPopup(e, tok.dataset.w, raw)));
-
-  if (isStory) {
-    const cta = $(".reader-cta", page);
-    cta.classList.remove("hidden");
-    $("button", cta).addEventListener("click", () => {
-      cta.remove();                             // one story, one quiz
-      readerStream("はい、クイズをおねがいします！", addReaderPage("quiz"));
-    }, { once: true });
-  } else {
-    if (reader.pages.indexOf(page) === 4) {     // wrap-up page: offer the report
-      const after = $(".quiz-after", page);
-      after.innerHTML = `<button class="btn primary rd-finish">${icon("clipboard-list")} Finish &amp; get report</button>`;
-      $(".rd-finish", after).addEventListener("click", showSessionSummary);
-    }
-    wireQuizAnswer(page);
-    if (state.settings.auto_play !== false) playTTS(raw, 1.0);  // hear the question
-  }
-  updateReaderNav();
-}
-
-function wireQuizAnswer(page) {
-  const box = $(".quiz-answer", page);
-  box.classList.remove("hidden");
-  const inp = $("input", box), send = $("button", box);
-  const go = () => {
-    const t = inp.value.trim();
-    if (!t || state.busy) return;
-    box.classList.add("hidden");
-    const chip = document.createElement("div");   // the answer stays on its
-    chip.className = "your-answer";               // question page for review
-    chip.innerHTML = `<span class="ya-label">Your answer</span>${esc(t)}`;
-    $(".quiz-after", page).appendChild(chip);
-    readerStream(t, addReaderPage("quiz"), chip); // corrections land on the chip
-  };
-  send.addEventListener("click", go);
-  inp.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
-  inp.focus();
 }
 
 /* ============================================================ word popup */
@@ -769,15 +420,8 @@ async function wordPopup(e, word, sentence) {
     ${info.example ? `<div class="ex">${esc(info.example)}<br><i>${esc(info.example_en || "")}</i></div>` : ""}
     <div class="pop-btns">
       <button class="btn small" id="pop-play">${icon("volume-2")}</button>
-      <button class="btn small primary" id="pop-save">${icon("bookmark-plus")} Save word</button>
     </div>`;
   $("#pop-play").addEventListener("click", ev => { ev.stopPropagation(); playTTS(word, 1.0); });
-  $("#pop-save").addEventListener("click", async ev => {
-    ev.stopPropagation();
-    await api.post("/api/vocab", info);
-    $("#pop-save").textContent = "✓ Saved"; $("#pop-save").disabled = true;
-    refreshDueBadge();
-  });
 }
 $("#word-pop").addEventListener("click", e => {
   if (e.target.id === "word-pop") $("#word-pop").classList.add("hidden");
@@ -961,6 +605,11 @@ async function callTurn(text) {
           pending = rest;
           sents.forEach(enqueueSpeech);
         }
+        if (ev.done && ev.speak) {  // learner-constrained reply: speak the original,
+          const [said] = splitSentences(ev.speak + "\n");  // caption what the learner can read
+          const [shown] = splitSentences((ev.display || ev.speak) + "\n");
+          said.forEach((s, i) => enqueueSpeech(s, shown[i] || s));
+        }
         if (ev.done && pending.trim()) { enqueueSpeech(pending.trim()); pending = ""; }
       }
     }
@@ -989,13 +638,13 @@ function splitSentences(text) {
   return [out, cur];
 }
 
-function enqueueSpeech(text) {
+function enqueueSpeech(text, caption = text) {
   if (!call.active || call.interrupted) return;
   const speed = state.settings.speed || 1.0;
   const voice = encodeURIComponent(state.settings.voice || "");
   const url = `/api/tts?text=${encodeURIComponent(text)}&speed=${speed}&voice=${voice}`;
   // start fetching immediately — next sentence synthesizes while this one plays
-  call.queue.push({ text, blob: fetch(url).then(r => r.ok ? r.blob() : null).catch(() => null) });
+  call.queue.push({ text, caption, blob: fetch(url).then(r => r.ok ? r.blob() : null).catch(() => null) });
   pumpSpeech();
 }
 
@@ -1008,7 +657,7 @@ async function pumpSpeech() {
   }
   call.playing = true;
   callStatus("speaking", "Kaiwa is speaking — tap the circle to interrupt");
-  showCaption(item.text, false);
+  showCaption(item.caption, false);
   const blob = await item.blob;
   if (!call.active || call.interrupted) { call.playing = false; return; }
   if (!blob) { call.playing = false; pumpSpeech(); return; }
@@ -1105,118 +754,6 @@ async function finishUtterance() {
   callTurn(text);
 }
 
-/* ================================================================ review */
-let reviewQueue = [], reviewIdx = 0;
-async function loadReview() {
-  const d = await api.get("/api/srs/due");
-  reviewQueue = d.due; reviewIdx = 0;
-  renderReviewCard();
-}
-// Mirrors db.srs_review() so each grade button can show when the word would
-// come back (like Anki's "10m / 1d / 3d" labels).
-function srsPreview(w) {
-  const fmt = d => d < 30 ? `${Math.round(d)}d` : d < 365 ? `${Math.round(d / 30)}mo` : `${(d / 365).toFixed(1)}y`;
-  const next = g => {
-    if (g === 0) return "10 min";
-    const q = { 1: 3, 2: 4, 3: 5 }[g];
-    const ease = Math.max(1.3, (w.ease || 2.5) + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)));
-    const reps = (w.reps || 0) + 1;
-    let interval;
-    if (reps === 1) interval = 1;
-    else if (reps === 2) interval = g >= 2 ? 3 : 2;
-    else {
-      const mult = { 1: 1.2, 2: ease, 3: ease * 1.3 }[g];
-      interval = Math.max(w.interval_days * mult, w.interval_days + 1);
-    }
-    return fmt(interval);
-  };
-  return [next(0), next(1), next(2), next(3)];
-}
-function renderReviewCard() {
-  const area = $("#review-area");
-  refreshDueBadge();
-  if (reviewIdx >= reviewQueue.length) {
-    area.innerHTML = `<div class="review-done">${icon("party-popper", "big-icon")}<br>All caught up!<br>
-      <small>Save words during chats and they'll appear here for review.</small></div>`;
-    return;
-  }
-  const w = reviewQueue[reviewIdx];
-  const iv = srsPreview(w);
-  area.innerHTML = `
-    <p class="review-count">${reviewIdx + 1} / ${reviewQueue.length}</p>
-    <div class="flashcard" id="fc">
-      <div class="big-word">${esc(w.word)}</div>
-      <div class="reading hidden">${esc(w.reading || "")} <i style="font-size:.8em">${esc(w.romaji || "")}</i></div>
-      <div class="meaning hidden">${esc(w.meaning || "")}</div>
-      ${w.example ? `<div class="example hidden">${esc(w.example)}<br><i>${esc(w.example_en || "")}</i></div>` : ""}
-      <p class="sub" id="fc-hint" style="margin-top:16px">tap to reveal</p>
-    </div>
-    <div class="hidden" id="grades">
-      <p class="sub grade-hint">How well did you remember?</p>
-      <div class="grade-row">
-        <button class="g-again" title="Forgot it — the word starts over and comes right back">Again<span>${iv[0]}</span></button>
-        <button class="g-hard" title="Got it, but it was a struggle — small step forward">Hard<span>${iv[1]}</span></button>
-        <button class="g-good" title="Remembered it after a moment — normal step forward">Good<span>${iv[2]}</span></button>
-        <button class="g-easy" title="Knew it instantly — big step forward">Easy<span>${iv[3]}</span></button>
-      </div>
-      <p class="sub grade-hint">the time under each button is when you'll see the word again</p>
-    </div>
-    <div style="text-align:center;margin-top:12px"><button class="btn small" id="fc-play">${icon("volume-2")} Listen</button></div>`;
-  $("#fc-play").addEventListener("click", () => playTTS(w.word, 1.0));
-  $("#fc").addEventListener("click", () => {
-    $$("#fc .hidden").forEach(el => el.classList.remove("hidden"));
-    $("#fc-hint").remove();
-    $("#grades").classList.remove("hidden");
-  }, { once: true });
-  const grade = g => async () => {
-    await api.post("/api/srs/review", { vocab_id: w.id, grade: g });
-    reviewIdx++; renderReviewCard();
-  };
-  $(".g-again").addEventListener("click", grade(0));
-  $(".g-hard").addEventListener("click", grade(1));
-  $(".g-good").addEventListener("click", grade(2));
-  $(".g-easy").addEventListener("click", grade(3));
-}
-
-/* ================================================================= vocab */
-const VOCAB_PAGE = 8;
-async function loadVocab() {
-  const d = await api.get("/api/vocab");
-  state.vocab = d.vocab;
-  state.vocabShown = VOCAB_PAGE;
-  renderVocab();
-}
-
-function renderVocab() {
-  const list = state.vocab || [];
-  if (!list.length) {
-    $("#vocab-list").innerHTML = `<p class="sub">No words yet — tap any word in a chat to save it!</p>`;
-    return;
-  }
-  const slice = list.slice(0, state.vocabShown);
-  const more = list.length - slice.length;
-  $("#vocab-list").innerHTML = slice.map(v => `
-    <div class="vocab-item" data-id="${v.id}">
-      <div><div class="w">${esc(v.word)}</div><div class="r">${esc(v.reading || "")}</div></div>
-      <div class="m">${esc(v.meaning || "")}${v.example ? `<div class="ex">${esc(v.example)}</div>` : ""}</div>
-      <button class="v-play" title="Listen">${icon("volume-2")}</button>
-      <button class="v-del" title="Delete">${icon("trash-2")}</button>
-    </div>`).join("") +
-    (more ? `<button class="btn small show-more" id="vocab-more">Show more (${more})</button>` : "");
-  $$(".vocab-item").forEach(item => {
-    const id = item.dataset.id;
-    const word = $(".w", item).textContent;
-    $(".v-play", item).addEventListener("click", () => playTTS(word, 1.0));
-    $(".v-del", item).addEventListener("click", async () => {
-      await api.del(`/api/vocab/${id}`);
-      state.vocab = state.vocab.filter(x => String(x.id) !== String(id));
-      renderVocab(); refreshDueBadge();
-    });
-  });
-  const moreBtn = $("#vocab-more");
-  if (moreBtn) moreBtn.addEventListener("click", () => { state.vocabShown += VOCAB_PAGE; renderVocab(); });
-}
-
 /* ============================================================== progress */
 async function loadProgress() {
   const d = await api.get("/api/dashboard");
@@ -1224,7 +761,7 @@ async function loadProgress() {
   $("#progress-stats").innerHTML =
     stat(`${d.streak}${icon("flame", "accent")}`, "day streak") + stat(d.total_minutes, "minutes practiced") +
     stat(d.sessions_count, "sessions") + stat(d.messages_spoken, "things you said") +
-    stat(d.words_saved, "words saved") + stat(d.mistakes_logged, "mistakes caught");
+    stat(d.mistakes_logged, "mistakes caught");
   state.recentSessions = d.recent_sessions;
   state.sessShown = SESS_PAGE;
   renderRecentSessions();
@@ -1300,13 +837,7 @@ async function loadSettings() {
   state.profile = p; state.settings = p.settings;
   $("#set-name").value = p.name || "";
   $("#set-interests").value = p.interests || "";
-  $("#set-goals").value = p.goals || "";
-  $$("#set-level button").forEach(b => b.classList.toggle("active", b.dataset.l === p.jlpt_level));
-
-  providerCatalog = await api.get("/api/providers");
-  $("#set-provider").innerHTML = providerCatalog.providers.map(x =>
-    `<option value="${x.id}" ${x.id === providerCatalog.active ? "selected" : ""}>${x.label}</option>`).join("");
-  renderProviderUI();
+  renderAISettings(); // async
 
   const v = await api.get("/api/voices");
   const cur = p.settings.voice || v.default;
@@ -1320,9 +851,26 @@ async function loadSettings() {
   $("#intonation-val").textContent = `${$("#set-intonation").value}×`;
   $("#set-autoplay").checked = p.settings.auto_play !== false;
   $("#set-autotranslate").checked = !!p.settings.auto_translate;
+  renderLearnerStatus(); // async
 
   renderPhoneSetup(); // async, fills its own card
   renderBackupStatus();
+}
+
+async function renderLearnerStatus() {
+  const l = await api.get("/api/learner").catch(() => null);
+  if (!l) return;
+  $("#learner-status").textContent = !l.available ? l.reason
+    : `${l.textbook}, lesson ${l.lesson} · ${l.grammar} grammar points · ${l.words} words · ${l.kanji} kanji words`;
+}
+
+async function renderAISettings() {
+  const a = await api.get("/api/ai");
+  $("#set-model").innerHTML = a.models.map(m =>
+    `<option ${m === a.model ? "selected" : ""}>${m}</option>`).join("");
+  $("#set-apikey").value = "";
+  $("#set-apikey").placeholder = a.key_saved ? "•••••• saved — paste to replace"
+    : a.has_key ? "using ANTHROPIC_API_KEY from .env" : "Paste your Anthropic API key";
 }
 
 async function renderBackupStatus() {
@@ -1348,10 +896,10 @@ $("#import-file").addEventListener("change", async () => {
   const resp = await fetch("/api/backup/import", { method: "POST", body: fd });
   const r = await resp.json();
   if (r.error) { $("#backup-status").textContent = r.error; return; }
-  location.reload(); // everything (profile, words, streak) just changed
+  location.reload(); // everything (profile, streak, history) just changed
 });
 $("#reset-data").addEventListener("click", async () => {
-  if (!confirm("Delete ALL data — profile, saved words, streak, and history?")) return;
+  if (!confirm("Delete ALL data — profile, streak, and history?")) return;
   if (!confirm("Really sure? This wipes everything back to a fresh install.\n(A safety copy is kept next to the database.)")) return;
   const r = await api.post("/api/reset", {});
   if (r.error) { $("#backup-status").textContent = r.error; return; }
@@ -1386,20 +934,6 @@ async function renderPhoneSetup() {
       3. Restart Kaiwa (run.sh), then come back here for your QR code.</p>`;
   }
 }
-/* AI provider selection */
-let providerCatalog = null;
-function renderProviderUI() {
-  const info = providerCatalog.providers.find(x => x.id === $("#set-provider").value);
-  if (!info) return;
-  $("#apikey-row").classList.toggle("hidden", !info.needs_key);
-  $("#set-apikey").value = "";
-  $("#set-apikey").placeholder = info.has_key ? "•••••• saved — paste to replace" : "Paste your API key";
-  const cur = info.model || info.models[0];
-  $("#set-model").innerHTML = info.models.map(m =>
-    `<option ${m === cur ? "selected" : ""}>${m}</option>`).join("") || "<option>none found</option>";
-}
-$("#set-provider").addEventListener("change", renderProviderUI);
-
 $("#set-speed").addEventListener("input", () => $("#speed-val").textContent = `${$("#set-speed").value}×`);
 $("#set-intonation").addEventListener("input", () => $("#intonation-val").textContent = `${$("#set-intonation").value}×`);
 /* voice preview: speak a sample with the currently selected (unsaved) voice + sliders */
@@ -1417,21 +951,13 @@ $("#voice-preview").addEventListener("click", () => {
   previewAudio.addEventListener("error", reset);
   previewAudio.play().catch(reset);
 });
-$("#set-level").addEventListener("click", e => {
-  const btn = e.target.closest("button"); if (!btn) return;
-  $$("#set-level button").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-});
 $("#save-settings").addEventListener("click", async () => {
   await api.put("/api/profile", {
     name: $("#set-name").value.trim(),
-    jlpt_level: $("#set-level .active")?.dataset.l || "N5",
     interests: $("#set-interests").value.trim(),
-    goals: $("#set-goals").value.trim(),
   });
-  const prov = $("#set-provider").value;
   const patch = {
-    provider: prov,
+    claude_model: $("#set-model").value,
     voice: $("#set-voice").value,
     speed: parseFloat($("#set-speed").value),
     intonation: parseFloat($("#set-intonation").value),
@@ -1441,13 +967,11 @@ $("#save-settings").addEventListener("click", async () => {
     romaji: $("#tgl-romaji").checked,
   };
   patch.backup_freq = $("#set-backup-freq").value;
-  patch[prov === "ollama" ? "model" : `model_${prov}`] = $("#set-model").value;
   const keyVal = $("#set-apikey").value.trim();
-  if (keyVal) patch[`api_key_${prov}`] = keyVal;  // only send a key when the user typed one
+  if (keyVal) patch.api_key_anthropic = keyVal;  // only send a key when the user typed one
   state.settings = await api.post("/api/settings", patch);
   state.profile = await api.get("/api/profile");
-  providerCatalog = await api.get("/api/providers");  // refresh has_key state
-  renderProviderUI();
+  renderAISettings();
   updateHealth();
   $("#settings-saved").classList.remove("hidden");
   setTimeout(() => $("#settings-saved").classList.add("hidden"), 1800);
@@ -1476,18 +1000,6 @@ async function dictSearch() {
         ${r.reading && r.reading !== r.form ? `<span class="dict-reading">${esc(r.reading)}</span>` : ""}
       </div>
       <div class="dict-def">${esc(r.meaning)}${r.common ? ' <span class="dict-common">common</span>' : ""}</div>
-      <button class="icon-btn dict-save" data-word="${esc(r.form)}" data-reading="${esc(r.reading || "")}"
-        data-meaning="${esc(r.meaning)}" title="Save to My Words">${icon("bookmark-plus")}</button>
     </div>`).join("");
 }
-$("#dict-results").addEventListener("click", async e => {
-  const btn = e.target.closest(".dict-save");
-  if (!btn || btn.disabled) return;
-  await api.post("/api/vocab", {
-    word: btn.dataset.word, reading: btn.dataset.reading, meaning: btn.dataset.meaning,
-  });
-  btn.innerHTML = icon("check");
-  btn.disabled = true;
-});
-
 boot();

@@ -1,7 +1,7 @@
 # ---- user data: profile, API keys, chat history, backups — NEVER commit
 /data/
 
-# ---- large downloaded assets (fetched by setup.sh / the in-app wizard)
+# ---- large downloaded assets (fetched by setup.sh)
 /models/
 /vendor/
 

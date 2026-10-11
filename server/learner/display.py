@@ -12,7 +12,7 @@ import difflib
 import re
 from dataclasses import dataclass, field
 
-from ..jp import has_kanji, kata_to_hira
+from ..jp import _ruby_segments, has_kanji, kata_to_hira
 from . import morph
 from .profile import Profile
 
@@ -25,6 +25,8 @@ class Segment:
     source: str      # the original token surface
     kanji: bool      # shown in kanji (learned spelling)
     reading: str     # hiragana reading
+    pos: str = ""
+    gap: str = ""    # text between the previous token and this one (kept as written)
 
 
 @dataclass
@@ -58,7 +60,8 @@ def render(text: str, profile: Profile, reading: str | None = None) -> Rendered:
     for t in toks:
         known = not has_kanji(t.surface) or t.orth in profile.kanji or t.surface in profile.kanji
         kana = t.kana if has_kanji(t.surface) else t.surface
-        segs.append(Segment(t.surface if known else kana, t.surface, known and has_kanji(t.surface), kana))
+        segs.append(Segment(t.surface if known else kana, t.surface, known and has_kanji(t.surface),
+                            kana, t.pos1))
         n = _norm(kana)
         spans.append((len(ours), len(ours) + len(n)))
         ours += n
@@ -84,8 +87,26 @@ def render(text: str, profile: Profile, reading: str | None = None) -> Rendered:
     # Text between tokens (spaces the tokenizer skipped) is kept as written.
     out, pos = [], 0
     for t, seg in zip(toks, segs):
-        out.append(text[pos:t.start])
-        out.append(seg.text)
+        seg.gap = text[pos:t.start]
+        out += [seg.gap, seg.text]
         pos = t.end
     out.append(text[pos:])
     return Rendered("".join(out), segs, fixes)
+
+
+_NON_WORDS = ("補助記号", "記号", "空白")
+
+
+def kaiwa_tokens(r: Rendered) -> list:
+    """The rendered sentence in jp.annotate()'s token format for the chat UI:
+    furigana only over kanji the learner knows, tappable words by what's shown."""
+    out = []
+    for seg in r.segments:
+        if seg.gap:
+            out.append({"surface": seg.gap, "ruby": [{"t": seg.gap, "r": None}],
+                        "reading": None, "pos": "空白", "word": False})
+        ruby = (_ruby_segments(seg.text, seg.reading) if seg.kanji
+                else [{"t": seg.text, "r": None}])
+        out.append({"surface": seg.text, "ruby": ruby, "reading": seg.reading, "pos": seg.pos,
+                    "word": seg.pos not in _NON_WORDS and bool(seg.text.strip())})
+    return out

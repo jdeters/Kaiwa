@@ -1,56 +1,35 @@
-"""Kaiwa — local Japanese conversation tutor (Pingo-style), fully offline.
+"""Kaiwa — Japanese conversation practice that stays within what you've learned.
 
-LLM: Ollama (Qwen3-4B) · STT: whisper.cpp · TTS: VOICEVOX / macOS say
+Conversation: learner model + Claude (server/learner). STT: whisper.cpp ·
+TTS: VOICEVOX / AivisSpeech / macOS say.
 """
-import io
 import json
 import os
 from datetime import date
 
-from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import (FileResponse, JSONResponse, Response,
-                               StreamingResponse)
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-
-import requests
-
 from starlette.background import BackgroundTask
 
-from . import backup, db, dictionary, jp, llm, prompts, scenarios, setup, stt, tts
+from . import backup, db, dictionary, jp, llm, phone, prompts, scenarios, stt, tts
+from .learner import service as learner
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
+MODES = ("free_chat", "roleplay", "call")
 
 app = FastAPI(title="Kaiwa")
 db.init()
 backup.start_scheduler()
 
 
+def settings() -> dict:
+    return db.get_profile()["settings"]
+
+
 def setting(key, default=None):
     return db.get_setting(key, default)
-
-
-def current_model() -> str | None:
-    return llm.resolve_model(setting("model"))
-
-
-def llm_config() -> dict:
-    """Active provider config for llm.chat_stream / llm.chat_json."""
-    provider = setting("provider", "ollama")
-    if provider not in llm.PROVIDERS:
-        provider = "ollama"
-    if provider == "ollama":
-        return {"provider": "ollama", "model": current_model(), "key": None}
-    info = llm.PROVIDERS[provider]
-    # Fall back to the default if the saved model is unknown — a previously
-    # picked id may have been retired by the provider (e.g. gemini-2.5-flash).
-    saved = setting(f"model_{provider}")
-    model = saved if saved in info["models"] else info["models"][0]
-    return {
-        "provider": provider,
-        "model": model,
-        "key": (setting(f"api_key_{provider}") or "").strip(),
-    }
 
 
 # ------------------------------------------------------------------- static
@@ -63,85 +42,44 @@ def index():
 app.mount("/static", StaticFiles(directory=WEB), name="static")
 
 
-# ------------------------------------------------------------------- health
+# ------------------------------------------------------------------- status
 
 @app.get("/api/health")
 def health():
-    cfg = llm_config()
+    s = settings()
     return {
-        "provider": cfg["provider"],
-        "provider_label": llm.PROVIDERS[cfg["provider"]]["label"],
-        "llm_ready": llm.not_ready_reason(cfg) is None,
-        "ollama": llm.ollama_up(),
-        "model": cfg["model"],
-        "models": llm.list_models(),
+        "claude": llm.not_ready_reason(s) is None,
+        "model": llm.model(s),
+        "learner": learner.status(),
         "whisper": stt.available(),
         "voicevox": tts.voicevox_up(),
         "aivis": tts.engine_up("aivis"),
-        "tokenizer": jp.backend_name(),
         "dictionary": dictionary.available(),
     }
 
 
-@app.get("/api/setup/hardware")
-def setup_hardware():
-    return setup.hardware_info()
+@app.get("/api/ai")
+def ai_info():
+    """Model choices for Settings (never returns the key itself)."""
+    s = settings()
+    return {"models": llm.MODELS, "model": llm.model(s), "has_key": bool(llm.api_key(s)),
+            "key_saved": bool((s.get("api_key_anthropic") or "").strip())}
+
+
+@app.get("/api/learner")
+def learner_status():
+    return learner.status()
 
 
 @app.get("/api/setup/phone")
 def setup_phone():
-    return setup.phone_info()
-
-
-@app.post("/api/setup/pull")
-async def setup_pull(req: Request):
-    """SSE proxy of Ollama's model download so the wizard can show live progress."""
-    body = await req.json()
-    name = (body.get("model") or "").strip()
-    if not name:
-        return JSONResponse({"error": "no model given"}, status_code=400)
-
-    def gen():
-        try:
-            with requests.post(f"{llm.OLLAMA}/api/pull", json={"model": name},
-                               stream=True, timeout=None) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if line:
-                        yield f"data: {line.decode()}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
-
-    return StreamingResponse(gen(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache",
-                                      "X-Accel-Buffering": "no"})
-
-
-@app.get("/api/providers")
-def providers():
-    """Provider catalog for the Settings UI (never returns the keys themselves)."""
-    s = db.get_profile()["settings"]
-    return {
-        "active": s.get("provider", "ollama"),
-        "providers": [
-            {
-                "id": pid,
-                "label": info["label"],
-                "needs_key": info["needs_key"],
-                "models": info["models"] if pid != "ollama" else llm.list_models(),
-                "has_key": bool((s.get(f"api_key_{pid}") or "").strip()),
-                "model": (s.get(f"model_{pid}") if s.get(f"model_{pid}") in info["models"]
-                          else info["models"][0]) if pid != "ollama" else s.get("model"),
-            }
-            for pid, info in llm.PROVIDERS.items()
-        ],
-    }
+    return phone.phone_info()
 
 
 # ------------------------------------------------------------------ profile
 
 def _safe_profile() -> dict:
-    """Profile with API keys stripped — the UI only needs to know they exist (/api/providers)."""
+    """Profile with the API key stripped — the UI only needs to know it exists (/api/ai)."""
     p = db.get_profile()
     p["settings"] = {k: v for k, v in p["settings"].items() if not k.startswith("api_key_")}
     return p
@@ -151,7 +89,6 @@ def _safe_profile() -> dict:
 def get_profile():
     p = _safe_profile()
     s = p["settings"]
-    s.setdefault("provider", "ollama")
     s.setdefault("voice", tts.default_voice())
     s.setdefault("speed", 1.0)
     s.setdefault("intonation", 1.0)
@@ -159,14 +96,12 @@ def get_profile():
     s.setdefault("furigana", True)
     s.setdefault("romaji", False)
     s.setdefault("auto_translate", False)
-    s.setdefault("model", current_model())
     return p
 
 
 @app.put("/api/profile")
 async def put_profile(req: Request):
-    body = await req.json()
-    db.update_profile(body)
+    db.update_profile(await req.json())
     return _safe_profile()
 
 
@@ -194,9 +129,10 @@ def get_scenarios():
 async def create_session(req: Request):
     body = await req.json()
     mode = body.get("mode", "free_chat")
-    scen = None
-    sid_key = None
-    if mode in ("roleplay", "lesson"):
+    if mode not in MODES:
+        return JSONResponse({"error": f"unknown mode: {mode}"}, status_code=400)
+    scen, sid_key = None, None
+    if mode == "roleplay":
         if body.get("scenario_id"):
             scen = scenarios.get(body["scenario_id"])
             sid_key = body["scenario_id"]
@@ -206,19 +142,9 @@ async def create_session(req: Request):
                 "id": "custom", "title": c.get("title", "Custom Roleplay"),
                 "description": c.get("description", ""),
                 "ai_role": c.get("ai_role", ""), "user_role": c.get("user_role", ""),
-                "setting": c.get("setting", ""), "target_vocab": [], "kind": "roleplay",
+                "setting": c.get("setting", ""), "kind": "roleplay",
             }
             sid_key = "custom"
-    elif mode == "story":
-        s = body.get("story") or {}
-        topic = (s.get("topic") or "").strip()
-        scen = {
-            "id": "story", "kind": "story",
-            "title": topic or "Story Time 📖",
-            "description": "Reading practice: a short story, then three questions.",
-            "topic": topic, "script": s.get("script", "normal"),
-        }
-        sid_key = "story"
     session_id = db.create_session(mode, sid_key, scen)
     return {"session_id": session_id, "scenario": scen}
 
@@ -226,78 +152,51 @@ async def create_session(req: Request):
 @app.get("/api/sessions/{sid}/messages")
 def session_messages(sid: int):
     msgs = db.get_messages(sid)
+    have_profile = learner.profile() is not None
     for m in msgs:
         if m["role"] == "assistant":
-            m["tokens"] = jp.annotate(m["text"])
+            m["tokens"] = (learner.tokens(m["text"], (m.get("meta") or {}).get("reading"))
+                           if have_profile else jp.annotate(m["text"]))
             m["romaji"] = jp.romaji(m["text"])
     return {"messages": msgs}
 
 
-def _history(sid: int, limit=16) -> list:
-    msgs = db.get_messages(sid)
-    return [{"role": m["role"], "content": m["text"]} for m in msgs[-limit:]]
-
-
 @app.post("/api/chat")
 async def chat(req: Request):
-    """SSE stream: user sends text (or empty to let the AI open the scene)."""
+    """One partner turn as SSE. The reply is generated, validated against the
+    learner profile, and repaired before anything is sent, so it arrives whole:
+    `speak` is the kanji original (TTS, lookups), `tokens`/`display` show known
+    kanji only. Empty text lets the partner open the scene."""
     body = await req.json()
     sid = body["session_id"]
     text = (body.get("text") or "").strip()
     session = db.get_session(sid)
     if not session:
         return JSONResponse({"error": "no such session"}, status_code=404)
-    cfg = llm_config()
-    err = llm.not_ready_reason(cfg)
+    profile = db.get_profile()
+    err = (None if learner.profile() else learner.NO_PROFILE) or llm.not_ready_reason(profile["settings"])
     if err:
         return JSONResponse({"error": err}, status_code=503)
-
-    profile = db.get_profile()
-    system = prompts.tutor_system_prompt(
-        profile, session["mode"], session["scenario"],
-        db.recent_mistakes(), db.recent_vocab(),
-    )
-
-    user_msg_id = None
-    if text:
-        user_msg_id = db.add_message(sid, "user", text)
-
-    messages = [{"role": "system", "content": system}] + _history(sid)
-    if not text and not db.get_messages(sid):
-        opener = ("(Begin now: write the story — Japanese title on the first line, then the story, "
-                  "then the one-line invitation. NO greeting. Do not mention this instruction.)"
-                  if session["mode"] == "story" else
-                  "(Begin now: greet me / open the scene with your first line. "
-                  "Do not mention this instruction.)")
-        messages.append({"role": "user", "content": opener})
+    user_msg_id = db.add_message(sid, "user", text) if text else None
 
     def gen():
         yield f"data: {json.dumps({'user_message_id': user_msg_id})}\n\n"
-        full = []
+        s = profile["settings"]
         try:
-            for delta in llm.chat_stream(messages, cfg):
-                full.append(delta)
-                yield f"data: {json.dumps({'delta': delta})}\n\n"
+            r = learner.reply(session, db.get_messages(sid), profile, llm.client(s), llm.model(s))
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
-        reply = "".join(full).strip()
-        # hiragana-only stories: enforce the script deterministically — the 4B
-        # model ignores "no kanji" instructions more often than not
-        scen = session.get("scenario") or {}
-        if session["mode"] == "story" and scen.get("script") == "hiragana":
-            reply = jp.kanji_to_kana(reply)
-        mid = db.add_message(sid, "assistant", reply)
+        mid = db.add_message(sid, "assistant", r["japanese"], translation=r["english"],
+                             meta=r["meta"])
         final = {
-            "done": True, "message_id": mid,
-            "tokens": jp.annotate(reply),
-            "romaji": jp.romaji(reply),
+            "done": True, "message_id": mid, "tokens": r["tokens"],
+            "romaji": jp.romaji(r["japanese"]), "speak": r["japanese"], "display": r["display"],
         }
         yield f"data: {json.dumps(final)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream",
-                             headers={"Cache-Control": "no-cache",
-                                      "X-Accel-Buffering": "no"})
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # ------------------------------------------------------- analysis (LLM jobs)
@@ -309,17 +208,20 @@ async def correct(req: Request):
     msg = db.get_message(mid)
     if not msg:
         return JSONResponse({"error": "no such message"}, status_code=404)
-    level = db.get_profile()["jlpt_level"]
     result = llm.chat_json(
-        prompts.CORRECTION_PROMPT.format(level=level, text=msg["text"]),
-        llm_config(),
-    )
+        prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"]), settings())
     result.setdefault("has_errors", False)
     result.setdefault("errors", [])
+    # corrected Japanese follows the same kanji rule as everything else
+    result["corrected"] = learner.show(result.get("corrected", ""))
+    for e in result["errors"]:
+        e["right"] = learner.show(e.get("right", ""))
+        e["explanation"] = learner.show_quoted(e.get("explanation", ""))
+    result["praise"] = learner.show_quoted(result.get("praise", ""))
     db.set_message_correction(mid, result)
     if result.get("has_errors"):
-        for err in result["errors"][:3]:
-            db.add_mistake(msg["session_id"], err)
+        for e in result["errors"][:3]:
+            db.add_mistake(msg["session_id"], e)
     return result
 
 
@@ -333,8 +235,7 @@ async def translate(req: Request):
         text = msg["text"] if msg else ""
     else:
         text = body.get("text", "")
-    result = llm.chat_json(prompts.TRANSLATE_PROMPT.format(text=text),
-                           llm_config(), num_predict=200)
+    result = llm.chat_json(prompts.TRANSLATE_PROMPT.format(text=text), settings())
     translation = result.get("translation", "")
     if body.get("message_id") and translation:
         db.set_message_translation(body["message_id"], translation)
@@ -343,19 +244,19 @@ async def translate(req: Request):
 
 @app.post("/api/hint")
 async def hint(req: Request):
+    """Suggested replies, filtered to ones the learner could actually say."""
     body = await req.json()
-    sid = body["session_id"]
-    level = db.get_profile()["jlpt_level"]
-    history = prompts.build_hint_history(db.get_messages(sid))
-    result = llm.chat_json(
-        prompts.HINT_PROMPT.format(level=level,
-                                   level_guide=prompts.LEVEL_GUIDE.get(level, ""),
-                                   history=history),
-        llm_config(), num_predict=400,
-    )
-    suggestions = result.get("suggestions", [])[:3]
-    for s in suggestions:
-        s["romaji"] = jp.romaji(s.get("japanese", ""))
+    history = prompts.build_hint_history(db.get_messages(body["session_id"]))
+    result = llm.chat_json(prompts.HINT_PROMPT.format(learner=learner.describe(), history=history),
+                           settings())
+    suggestions = []
+    for s in result.get("suggestions", []):
+        ja = s.get("japanese", "")
+        if ja and learner.check(ja).ok:
+            suggestions.append({"japanese": learner.show(ja), "english": s.get("english", ""),
+                                "romaji": jp.romaji(ja)})
+        if len(suggestions) == 3:
+            break
     return {"suggestions": suggestions}
 
 
@@ -387,23 +288,22 @@ async def word(req: Request):
         pos_label = ", ".join(_POS_LABELS.get(p, p) for p in pos.split(",") if p)
         notes = pos_label
         if lemma and lemma != w:
-            notes = f"dictionary form: {lemma}" + (f" · {pos_label}" if pos_label else "")
+            notes = f"dictionary form: {learner.show(lemma)}" + (f" · {pos_label}" if pos_label else "")
         return {
             "word": w, "reading": entry["reading"] or info["reading"],
             "romaji": info["romaji"], "meaning": entry["meaning"],
             "notes": notes, "example": "", "example_en": "",
         }
 
-    # 2) LLM fallback for names/slang/phrases JMdict doesn't know.
-    result = llm.chat_json(prompts.WORD_PROMPT.format(word=w, sentence=sentence),
-                           llm_config(), num_predict=250)
+    # 2) Claude fallback for names/phrases JMdict doesn't know.
+    result = llm.chat_json(prompts.WORD_PROMPT.format(word=w, sentence=sentence), settings())
     return {
         "word": w,
         "reading": info["reading"],
         "romaji": info["romaji"],
         "meaning": result.get("meaning", ""),
-        "notes": result.get("notes", ""),
-        "example": result.get("example", ""),
+        "notes": learner.show_quoted(result.get("notes", "")),
+        "example": learner.show(result.get("example", "")),
         "example_en": result.get("example_en", ""),
     }
 
@@ -414,9 +314,8 @@ def end_session(sid: int):
     if not session:
         return JSONResponse({"error": "no such session"}, status_code=404)
     msgs = db.get_messages(sid)
-    level = db.get_profile()["jlpt_level"]
     transcript = "\n".join(
-        f"{'Tutor' if m['role'] == 'assistant' else 'Student'}: {m['text']}" for m in msgs
+        f"{'Partner' if m['role'] == 'assistant' else 'Student'}: {m['text']}" for m in msgs
     )
     corrections = []
     for m in msgs:
@@ -426,26 +325,31 @@ def end_session(sid: int):
     summary = {}
     if any(m["role"] == "user" for m in msgs):
         summary = llm.chat_json(
-            prompts.SUMMARY_PROMPT.format(level=level, transcript=transcript[-4000:],
+            prompts.SUMMARY_PROMPT.format(learner=learner.describe(), transcript=transcript[-4000:],
                                           corrections="\n".join(corrections) or "none"),
-            llm_config(), num_predict=500,
+            settings(),
         )
     summary.setdefault("summary", "Session complete — nice work showing up to practice!")
     summary.setdefault("strengths", [])
     summary.setdefault("areas_to_improve", [])
     summary.setdefault("new_words", [])
+    summary["summary"] = learner.show_quoted(summary["summary"])
+    for k in ("strengths", "areas_to_improve"):
+        summary[k] = [learner.show_quoted(x) for x in summary[k]]
     for w in summary["new_words"]:
-        w.update(jp.word_info(w.get("word", "")))
         entry = dictionary.lookup(w.get("word", "")) or (
             dictionary.lookup(jp.lemma_of(w.get("word", "")) or ""))
-        if entry:  # prefer real dictionary glosses over LLM guesses
+        if entry:  # prefer real dictionary glosses over model guesses
             w["meaning"] = entry["meaning"]
             w["reading"] = entry["reading"] or w.get("reading", "")
-    user_turns = sum(1 for m in msgs if m["role"] == "user")
-    summary["stats"] = {"turns": user_turns, "corrections": len(corrections)}
+        w["word"] = learner.show(w.get("word", ""))  # new words: no unlearned kanji
+    summary["stats"] = {"turns": sum(1 for m in msgs if m["role"] == "user"),
+                        "corrections": len(corrections)}
     db.end_session(sid, summary)
     return summary
 
+
+# ------------------------------------------------------------------ backups
 
 @app.get("/api/backup/status")
 def backup_status():
@@ -518,66 +422,6 @@ def api_tts(text: str, voice: str = "", speed: float = 1.0, intonation: float | 
         return JSONResponse({"error": "tts failed"}, status_code=500)
     return Response(content=wav, media_type="audio/wav",
                     headers={"Cache-Control": "max-age=86400"})
-
-
-# -------------------------------------------------------------- vocab & SRS
-
-@app.get("/api/vocab")
-def vocab_list():
-    return {"vocab": db.list_vocab()}
-
-
-def _root_form(b: dict) -> dict:
-    """Store dictionary forms, not conjugations/particles (食べました → 食べる).
-
-    Only swaps when JMdict confirms the lemma, so we never trade a real word
-    for a bad tokenizer guess.
-    """
-    w = (b.get("word") or "").strip()
-    b = {**b, "word": w}
-    if not w or dictionary.lookup(w):  # already a dictionary form
-        return b
-    # Conjugated verbs/adjectives want the lemma (食べました → 食べる); anything
-    # else wants the first-token surface, which keeps the user's orthography
-    # while shedding trailing particles (ご飯を → ご飯, not the lemma's 御飯).
-    toks = jp.annotate(w)
-    first = toks[0]["surface"] if toks else ""
-    cands = (jp.lemma_of(w), first) if toks and toks[0]["pos"] in ("動詞", "形容詞") \
-        else (first, jp.lemma_of(w))
-    for cand in cands:
-        if not cand or cand == w:
-            continue
-        info = jp.word_info(cand)
-        entry = dictionary.lookup(cand, info["reading"])
-        if entry:
-            return {**b, "word": cand, "reading": entry["reading"] or info["reading"],
-                    "romaji": info["romaji"], "meaning": entry["meaning"]}
-    return b
-
-
-@app.post("/api/vocab")
-async def vocab_add(req: Request):
-    b = _root_form(await req.json())
-    row = db.add_vocab(b["word"], b.get("reading", ""), b.get("romaji", ""),
-                       b.get("meaning", ""), b.get("example", ""), b.get("example_en", ""))
-    return row
-
-
-@app.delete("/api/vocab/{vid}")
-def vocab_delete(vid: int):
-    db.delete_vocab(vid)
-    return {"ok": True}
-
-
-@app.get("/api/srs/due")
-def srs_due():
-    return {"due": db.srs_due()}
-
-
-@app.post("/api/srs/review")
-async def srs_review(req: Request):
-    b = await req.json()
-    return db.srs_review(b["vocab_id"], int(b["grade"]))
 
 
 # ---------------------------------------------------------------- dashboard

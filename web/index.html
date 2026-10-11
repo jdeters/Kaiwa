@@ -19,8 +19,6 @@
   <nav id="sidebar">
     <div class="logo"><svg class="icon logo-icon"><use href="/static/icons.svg#messages-square"/></svg> <span>Kaiwa</span><small>会話</small></div>
     <button class="nav-btn active" data-view="home"><svg class="icon"><use href="/static/icons.svg#house"/></svg><em>Home</em></button>
-    <button class="nav-btn" data-view="review"><svg class="icon"><use href="/static/icons.svg#layers"/></svg><em>Review</em> <span id="due-badge" class="badge hidden"></span></button>
-    <button class="nav-btn" data-view="vocab"><svg class="icon"><use href="/static/icons.svg#book-open"/></svg><em>My Words</em></button>
     <button class="nav-btn" data-view="dict"><svg class="icon"><use href="/static/icons.svg#languages"/></svg><em>Dictionary</em></button>
     <button class="nav-btn" data-view="progress"><svg class="icon"><use href="/static/icons.svg#trending-up"/></svg><em>Progress</em></button>
     <button class="nav-btn" data-view="settings"><svg class="icon"><use href="/static/icons.svg#settings"/></svg><em>Settings</em></button>
@@ -37,7 +35,7 @@
         </div>
         <div class="chips" id="home-stats"></div>
       </header>
-      <div id="srs-banner" class="srs-banner hidden"></div>
+      <div id="setup-banner" class="setup-banner hidden"></div>
 
       <div class="mode-cards">
         <div class="mode-card free" id="card-free">
@@ -52,14 +50,7 @@
           <svg class="icon mode-icon"><use href="/static/icons.svg#drama"/></svg>
           <h3>Custom Roleplay</h3><p>Invent your own scene — any role, any place.</p>
         </div>
-        <div class="mode-card story" id="card-story">
-          <svg class="icon mode-icon"><use href="/static/icons.svg#book-open"/></svg>
-          <h3>Story Time</h3><p>Read a short story at your level, then answer questions.</p>
-        </div>
       </div>
-
-      <h2 class="sect"><svg class="icon sect-icon"><use href="/static/icons.svg#book-marked"/></svg> Guided Lessons</h2>
-      <div id="lessons-row" class="scenario-row"></div>
 
       <h2 class="sect"><svg class="icon sect-icon"><use href="/static/icons.svg#clapperboard"/></svg> Roleplay Scenarios</h2>
       <div id="scenario-cats"></div>
@@ -86,36 +77,8 @@
       </footer>
     </section>
 
-    <!-- STORY READER (story mode gets a book-like page, not chat bubbles) -->
-    <section id="view-reader" class="view hidden">
-      <header class="chat-head">
-        <button id="reader-back" class="icon-btn" title="Back"><svg class="icon"><use href="/static/icons.svg#arrow-left"/></svg></button>
-        <div class="chat-title"><h2 id="reader-title">Story Time</h2><small id="reader-sub"></small></div>
-        <div class="chat-tools">
-          <label class="mini-toggle"><input type="checkbox" id="rd-furigana" checked><span>ふりがな</span></label>
-          <label class="mini-toggle"><input type="checkbox" id="rd-romaji"><span>romaji</span></label>
-          <button id="reader-end" class="btn danger small">End &amp; Review</button>
-        </div>
-      </header>
-      <div id="reader-pages"></div>
-      <footer id="reader-nav" class="reader-nav hidden">
-        <button id="rd-prev" class="icon-btn big" title="Previous page"><svg class="icon"><use href="/static/icons.svg#arrow-left"/></svg></button>
-        <div id="rd-dots" class="rd-dots"></div>
-        <button id="rd-next" class="icon-btn big" title="Next page"><svg class="icon flip-x"><use href="/static/icons.svg#arrow-left"/></svg></button>
-      </footer>
-    </section>
 
-    <!-- REVIEW (SRS) -->
-    <section id="view-review" class="view hidden">
-      <h1><svg class="icon h1-icon"><use href="/static/icons.svg#layers"/></svg> Review</h1><p class="sub">Spaced repetition for the words you saved.</p>
-      <div id="review-area"></div>
-    </section>
 
-    <!-- VOCAB -->
-    <section id="view-vocab" class="view hidden">
-      <h1><svg class="icon h1-icon"><use href="/static/icons.svg#book-open"/></svg> My Words</h1><p class="sub">Every word you saved from conversations.</p>
-      <div id="vocab-list"></div>
-    </section>
 
     <!-- DICTIONARY -->
     <section id="view-dict" class="view hidden">
@@ -142,23 +105,14 @@
         <div class="card">
           <h3><svg class="icon"><use href="/static/icons.svg#user-round"/></svg> You</h3>
           <label>Name <input id="set-name" type="text" placeholder="Your name"></label>
-          <label>Level
-            <div class="level-row" id="set-level">
-              <button data-l="N5">N5<br><small>Beginner</small></button>
-              <button data-l="N4">N4</button>
-              <button data-l="N3">N3</button>
-              <button data-l="N2">N2</button>
-              <button data-l="N1">N1<br><small>Advanced</small></button>
-            </div>
-          </label>
           <label>Interests <input id="set-interests" type="text" placeholder="anime, cooking, travel…"></label>
-          <label>Goals <input id="set-goals" type="text" placeholder="trip to Japan in spring…"></label>
+          <p class="sub"><b>What you know</b> (from Anki + your textbook): <span id="learner-status">…</span></p>
+          <p class="sub">After studying, rebuild it with Anki open: <code>.venv/bin/python -m server.learner build</code></p>
         </div>
         <div class="card">
           <h3><svg class="icon"><use href="/static/icons.svg#sparkles"/></svg> AI</h3>
-          <label>AI Provider <select id="set-provider"></select></label>
-          <label id="apikey-row" class="hidden">API key <input id="set-apikey" type="password" autocomplete="off"></label>
-          <label>Model <select id="set-model"></select></label>
+          <label>Claude model <select id="set-model"></select></label>
+          <label>Anthropic API key <input id="set-apikey" type="password" autocomplete="off"></label>
           <label>Voice
             <div class="voice-row">
               <select id="set-voice"></select>
@@ -177,7 +131,7 @@
         </div>
         <div class="card">
           <h3><svg class="icon"><use href="/static/icons.svg#shield-alert"/></svg> Your data</h3>
-          <p class="sub" style="margin-bottom:12px">Your streak, saved words, and history live in one local file. Don't lose them to a broken laptop.</p>
+          <p class="sub" style="margin-bottom:12px">Your streak, sessions, and history live in one local file. Don't lose them to a broken laptop.</p>
           <label>Automatic backup
             <select id="set-backup-freq">
               <option value="off">Off</option>
@@ -197,14 +151,6 @@
         <div class="card">
           <h3><svg class="icon"><use href="/static/icons.svg#smartphone"/></svg> On your phone</h3>
           <div id="phone-setup"><p class="sub">Checking…</p></div>
-        </div>
-        <div class="card">
-          <h3><svg class="icon"><use href="/static/icons.svg#heart"/></svg> Community</h3>
-          <p class="sub" style="margin-bottom:12px">Follow Kaiwa for updates, tips, and new scenarios.</p>
-          <div class="link-list">
-            <a class="ext-link" href="https://yeshsanchez.github.io/Kaiwa" target="_blank" rel="noopener"><svg class="icon"><use href="/static/icons.svg#link"/></svg> Website</a>
-            <a class="ext-link" href="https://github.com/yeshsanchez/Kaiwa" target="_blank" rel="noopener"><svg class="icon"><use href="/static/icons.svg#users"/></svg> GitHub — report bugs, request features</a>
-          </div>
         </div>
       </div>
     </section>
@@ -263,85 +209,16 @@
     <div class="modal-btns"><button class="btn" id="cr-cancel">Cancel</button><button class="btn primary" id="cr-start">Start scene ➤</button></div>
   </div>
 </div>
-<!-- Story Time modal -->
-<div id="story-modal" class="modal hidden">
-  <div class="modal-inner">
-    <h2><svg class="icon"><use href="/static/icons.svg#book-open"/></svg> Story Time</h2>
-    <p class="sub">Kaiwa writes a short story at your level — read it, then answer three questions about it.</p>
-    <label>Topic <input id="st-topic" placeholder="leave blank and Kaiwa picks one for you"></label>
-    <label>Script focus</label>
-    <div id="st-script" class="level-row wrap">
-      <button data-s="normal" class="active">Normal</button>
-      <button data-s="hiragana">ひらがな only</button>
-      <button data-s="katakana">カタカナ practice</button>
-      <button data-s="stretch">Kanji stretch</button>
-    </div>
-    <div class="modal-btns"><button class="btn" id="st-cancel">Cancel</button><button class="btn primary" id="st-start">Write my story ➤</button></div>
-  </div>
-</div>
 <!-- Summary modal -->
 <div id="summary-modal" class="modal hidden"><div class="modal-inner" id="summary-inner"></div></div>
 <!-- Onboarding modal -->
 <div id="onboard-modal" class="modal hidden">
   <div class="modal-inner">
     <h2>ようこそ！ Welcome to Kaiwa <svg class="icon accent"><use href="/static/icons.svg#flower-2"/></svg></h2>
-
-    <!-- STEP 0: AI setup (skipped when an AI is already working) -->
-    <div id="ob-step-ai" class="hidden">
-      <p class="sub">Kaiwa needs an AI brain. Pick how you want to run it — you can change this later in Settings.</p>
-      <div id="ob-ai-choice">
-        <div class="setup-opt" id="ob-opt-local">
-          <svg class="icon"><use href="/static/icons.svg#house"/></svg>
-          <div><b>On this computer</b><br><small>Free &amp; 100% private. Downloads a model once (1–5 GB), replies depend on your hardware.</small></div>
-        </div>
-        <div class="setup-opt" id="ob-opt-cloud">
-          <svg class="icon"><use href="/static/icons.svg#sparkles"/></svg>
-          <div><b>Cloud AI</b><br><small>Faster &amp; smarter. Needs an API key (Google Gemini has a free tier).</small></div>
-        </div>
-      </div>
-
-      <div id="ob-local" class="hidden">
-        <div id="ob-ollama-missing" class="hidden">
-          <p>Local AI runs on <b>Ollama</b>, a free app.</p>
-          <p><a class="btn primary" href="https://ollama.com/download" target="_blank" rel="noopener">Download Ollama ↗</a></p>
-          <p class="sub"><svg class="icon spin"><use href="/static/icons.svg#loader"/></svg> Install and open it — I'll notice automatically…</p>
-        </div>
-        <div id="ob-model-dl" class="hidden">
-          <p id="ob-hw-note" class="sub"></p>
-          <button id="ob-pull-btn" class="btn primary">Download model</button>
-          <div id="ob-pull-progress" class="hidden">
-            <div class="progress"><div id="ob-pull-fill" class="progress-fill"></div></div>
-            <p id="ob-pull-status" class="sub"></p>
-          </div>
-        </div>
-      </div>
-
-      <div id="ob-cloud" class="hidden">
-        <label>Provider <select id="ob-provider"></select></label>
-        <p id="ob-key-hint" class="sub"></p>
-        <label>API key <input id="ob-apikey" type="password" autocomplete="off" placeholder="Paste your API key"></label>
-        <div class="modal-btns"><button class="btn primary" id="ob-cloud-save">Continue ➤</button></div>
-      </div>
-
-      <p id="ob-ai-back-row" class="hidden"><button class="btn" id="ob-ai-back">← Back</button></p>
-    </div>
-
-    <!-- STEP 1: profile -->
-    <div id="ob-step-profile" class="hidden">
-      <p class="sub">Two quick questions so your tutor knows you:</p>
-      <label>What should Kaiwa call you? <input id="ob-name" placeholder="Your name"></label>
-      <label>Your Japanese level
-        <div class="level-row" id="ob-level">
-          <button data-l="N5" class="active">N5<br><small>Beginner</small></button>
-          <button data-l="N4">N4</button>
-          <button data-l="N3">N3</button>
-          <button data-l="N2">N2</button>
-          <button data-l="N1">N1<br><small>Advanced</small></button>
-        </div>
-      </label>
-      <label>Interests (helps Kaiwa pick topics) <input id="ob-interests" placeholder="anime, cooking, football…"></label>
-      <div class="modal-btns"><button class="btn primary" id="ob-start">はじめましょう！ Let's go ➤</button></div>
-    </div>
+    <p class="sub">Your conversation partner only uses words and grammar you've learned (from Anki and your textbook). Two quick questions:</p>
+    <label>What should Kaiwa call you? <input id="ob-name" placeholder="Your name"></label>
+    <label>Interests (helps pick topics) <input id="ob-interests" placeholder="anime, cooking, football…"></label>
+    <div class="modal-btns"><button class="btn primary" id="ob-start">はじめましょう！ Let's go ➤</button></div>
   </div>
 </div>
 
