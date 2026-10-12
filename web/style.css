@@ -214,6 +214,16 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .icon-btn.big:hover { background: var(--accent-soft); }
 .icon-btn.send { background: var(--accent); color: #fff; }
 .kana-btn { font-weight: 800; font-size: 1.05rem; color: var(--sub); }
+.kanji-bar {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  max-width: 860px; margin: 0 auto; width: 100%; padding: 0 24px;
+}
+.kanji-bar button {
+  border: 2px solid var(--border); background: var(--panel); border-radius: 10px;
+  padding: 4px 12px; font-size: 1.2rem; box-shadow: var(--shadow);
+}
+.kanji-bar button:first-child { border-color: var(--accent); }   /* the one Tab picks */
+.kanji-bar button small { margin-left: 6px; font-size: .7rem; color: var(--sub); }
 .kana-btn.on { color: var(--accent); }
 .icon-btn.send:hover { background: #d94b63; }
 .icon-btn.mic.recording { background: var(--accent); animation: pulse 1.2s infinite; }
@@ -424,5 +434,6 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
   .chat-tools { gap: 9px; }
   .chat-tools .mini-toggle { font-size: .72rem; }
   .composer { padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); gap: 7px; }
+  .kanji-bar { padding: 0 12px; }
   .resume-pill { bottom: calc(70px + env(safe-area-inset-bottom)); }  /* above the tab bar */
 }

@@ -11,14 +11,14 @@ import re
 import threading
 from datetime import datetime
 
-from . import display, generate, grammar, validator
+from . import display, generate, grammar, ime, validator
 from .profile import SNAPSHOT_PATH, Profile
 
 OPENER = "(The scene begins. Say your first line.)"
 NO_PROFILE = "No learner profile yet — with Anki open, run: .venv/bin/python -m server.learner build"
 
 _lock = threading.Lock()
-_cache = {"mtime": None, "profile": None, "concepts": None}
+_cache = {"mtime": None, "profile": None, "concepts": None, "ime": None}
 
 
 def profile() -> Profile | None:
@@ -29,7 +29,8 @@ def profile() -> Profile | None:
         return None
     with _lock:
         if _cache["mtime"] != mtime:
-            _cache.update(mtime=mtime, profile=Profile.load(), concepts=grammar.load_concepts())
+            _cache.update(mtime=mtime, profile=Profile.load(), concepts=grammar.load_concepts(),
+                          ime=None)
         return _cache["profile"]
 
 
@@ -133,6 +134,16 @@ def show_quoted(text: str) -> str:
     if not text or profile() is None:
         return text
     return _JAPANESE_RUN.sub(lambda m: show(m.group()), text)
+
+
+def ime_table() -> dict:
+    """Kana → learned-kanji suggestions for the chat input (built once per profile)."""
+    p = profile()
+    if p is None:
+        return {}
+    if _cache["ime"] is None:
+        _cache["ime"] = ime.table(p)
+    return _cache["ime"]
 
 
 def check(text: str) -> validator.Result:

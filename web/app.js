@@ -86,6 +86,7 @@ async function boot() {
   state.profile = await api.get("/api/profile");
   state.settings = state.profile.settings;
   setKanaInput(state.settings.romaji_input !== false);
+  loadIme();
   updateHealth();
   setInterval(updateHealth, 20000);
   if (!state.profile.name) startOnboarding();
@@ -367,13 +368,17 @@ $("#hint-btn").addEventListener("click", async () => {
 
 /* composer */
 $("#send-btn").addEventListener("click", () => submitInput());
-$("#chat-input").addEventListener("keydown", e => { if (e.key === "Enter") submitInput(); });
+$("#chat-input").addEventListener("keydown", e => {
+  if (e.key === "Tab" && imeCands.length) { e.preventDefault(); acceptKanji(imeCands[0]); return; }
+  if (e.key === "Enter") submitInput();
+});
 function submitInput(convert = state.kanaInput) {
   const inp = $("#chat-input");
   let t = inp.value.trim();
   if (convert) t = wanakana.toKana(t);   // finish a trailing "n" → ん
   if (!t || state.busy) return;
   inp.value = "";
+  updateKanjiBar();
   sendChat(t);
 }
 
@@ -392,8 +397,49 @@ function setKanaInput(on) {
 $("#kana-btn").addEventListener("click", () => {
   setKanaInput(!state.kanaInput);
   api.post("/api/settings", { romaji_input: state.kanaInput });
+  updateKanjiBar();
   $("#chat-input").focus();
 });
+
+/* kana → kanji: suggest learned kanji for the kana just before the cursor
+   (たべ → 食べ, えいが → 映画). Only kanji the learner knows, so choosing the
+   right one is recall practice. Tab takes the first suggestion. */
+let imeTable = {}, imeMax = 0, imeCands = [];
+async function loadIme() {
+  const r = await api.get("/api/ime").catch(() => null);
+  imeTable = (r && r.table) || {};
+  imeMax = Math.max(0, ...Object.keys(imeTable).map(k => k.length));
+}
+function updateKanjiBar() {
+  const inp = $("#chat-input"), bar = $("#kanji-bar");
+  imeCands = [];
+  if (state.kanaInput) {
+    const run = (inp.value.slice(0, inp.selectionStart).match(/[ぁ-ゖー]+$/) || [""])[0];
+    for (let n = Math.min(run.length, imeMax); n >= 1; n--) {   // longest match first
+      const kana = run.slice(-n);
+      (imeTable[kana] || []).forEach(kanji => imeCands.push({ kana, kanji }));
+    }
+  }
+  imeCands = imeCands.slice(0, 8);
+  bar.classList.toggle("hidden", !imeCands.length);
+  bar.innerHTML = imeCands.map((c, i) =>
+    `<button type="button" data-i="${i}">${esc(c.kanji)}<small>${esc(c.kana)}</small></button>`).join("");
+}
+function acceptKanji(c) {
+  const inp = $("#chat-input"), pos = inp.selectionStart, start = pos - c.kana.length;
+  inp.value = inp.value.slice(0, start) + c.kanji + inp.value.slice(pos);
+  inp.setSelectionRange(start + c.kanji.length, start + c.kanji.length);
+  inp.focus();
+  updateKanjiBar();
+}
+$("#kanji-bar").addEventListener("mousedown", e => e.preventDefault());  // keep focus + cursor in the input
+$("#kanji-bar").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (b) acceptKanji(imeCands[+b.dataset.i]);
+});
+// deferred so WanaKana has already turned the keystroke into kana
+["input", "click", "keyup"].forEach(ev =>
+  $("#chat-input").addEventListener(ev, () => setTimeout(updateKanjiBar)));
 
 /* end session */
 $("#end-session").addEventListener("click", showSessionSummary);

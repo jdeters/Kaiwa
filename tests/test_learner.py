@@ -4,7 +4,7 @@ Run: .venv/bin/python -m pytest tests/
 """
 import pytest
 
-from server.learner import display, grammar, morph, validator
+from server.learner import display, grammar, ime, morph, validator
 from server.learner.profile import Profile, entry_variants
 
 
@@ -114,3 +114,23 @@ def test_display_ignores_unalignable_reading(profile):
     # a reading that doesn't match the sentence leaves UniDic's readings alone
     r = display.render("映画を見ました。", profile, reading="まったくちがうぶん")
     assert r.display == "映画を見ました。"
+
+
+def test_ime_offers_only_learned_kanji(profile):
+    # fixture kanji: 映画, 見る, 飲む — 食べる is a known word but not a known kanji spelling
+    t = ime.table(profile)
+    assert t["えいが"] == ["映画"]
+    assert t["のみ"] == ["飲み"] and t["のま"] == ["飲ま"] and t["のむ"] == ["飲む"]
+    assert t["み"] == ["見"]
+    assert "たべ" not in t and "たべる" not in t
+
+
+def test_ime_conjugation_stems():
+    snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "words": [], "phrases": [],
+            "kanji_words": {"食べる": "Core 2000", "高い": "Core 2000", "来る": "Core 2000",
+                            "何": "Core 2000"}}
+    t = ime.table(Profile(snap))
+    assert t["たべ"] == ["食べ"]
+    assert t["たかく"] == ["高く"] and t["たかか"] == ["高か"]    # 高くない / 高かった
+    assert t["き"] == ["来"] and t["こ"] == ["来"]
+    assert "何" in t["なに"] and "何" in t["なん"]

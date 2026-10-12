@@ -73,6 +73,12 @@ def learner_status():
     return learner.status()
 
 
+@app.get("/api/ime")
+def ime_table():
+    """Kana → kanji suggestions for typing, limited to kanji the learner has learned."""
+    return {"table": learner.ime_table()}
+
+
 @app.get("/api/setup/phone")
 def setup_phone():
     return phone.phone_info()

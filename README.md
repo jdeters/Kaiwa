@@ -15,7 +15,9 @@ reply is checked against them before you see it.
   kanji in Anki (Core 2000); everything else is shown in hiragana.
 
 Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. No
-Japanese keyboard needed: type romaji and it becomes kana as you type. Also:
+Japanese keyboard needed: type romaji and it becomes kana as you type, then
+pick kanji for the words whose kanji you've learned (Tab or click), which is
+also kanji recall practice. Also:
 corrections of what you write, suggested replies (filtered to what you could
 say), translations, tap-a-word lookups, session reports, and progress tracking.
 
