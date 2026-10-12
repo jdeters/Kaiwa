@@ -14,6 +14,11 @@ reply is checked against them before you see it.
 - **Kanji you can read**: words are shown in kanji only if you've learned their
   kanji in Anki (Core 2000); everything else is shown in hiragana.
 
+**Speaking progress**: every message you send is analyzed for which of your
+known words and grammar you produced on your own (as opposed to echoing your
+partner, using a hint, or with a mistake), typed or spoken. Progress → Speaking
+shows what you've actually said and what you've studied but never used.
+
 Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. No
 Japanese keyboard needed: type romaji and it becomes kana as you type, then
 pick kanji for the words whose kanji you've learned (Tab or click), which is
@@ -63,6 +68,7 @@ unzip the engine for your OS into `vendor/`.
 | Grammar detection, checker | [server/learner/grammar.py](server/learner/grammar.py), [validator.py](server/learner/validator.py) |
 | Draft → check → repair loop | [server/learner/generate.py](server/learner/generate.py) |
 | Kana/kanji display | [server/learner/display.py](server/learner/display.py) |
+| Speaking progress (what you produced) | [server/learner/production.py](server/learner/production.py) |
 | Web app | [server/main.py](server/main.py), [web/](web/) |
 
 Command-line tools:

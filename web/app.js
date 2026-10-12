@@ -221,10 +221,10 @@ function renderTokens(tokens) {
 const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* SSE pump for /api/chat (the voice call has its own, sentence-by-sentence) */
-async function streamChat(text, h) {
+async function streamChat(text, h, extra = {}) {
   const resp = await fetch("/api/chat", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: state.session.session_id, text }),
+    body: JSON.stringify({ session_id: state.session.session_id, text, ...extra }),
   });
   if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
   const reader = resp.body.getReader();
@@ -250,7 +250,7 @@ async function streamChat(text, h) {
   }
 }
 
-async function sendChat(text) {
+async function sendChat(text, extra = {}) {   // extra: {channel: "text"|"voice", hint: bool}
   if (state.busy || !state.session) return;
   state.busy = true;
   $("#hints").classList.add("hidden");
@@ -277,7 +277,7 @@ async function sendChat(text) {
         scrollDown();
       },
       onDone: (ev, raw) => finishAiMessage(aiDiv, ev, raw),
-    });
+    }, extra);
   } catch (e) {
     bubble.textContent = "⚠️ " + e.message;
   }
@@ -358,6 +358,7 @@ $("#hint-btn").addEventListener("click", async () => {
   h.classList.remove("hidden");
   h.innerHTML = `<div class="hint-card">${icon("lightbulb")} thinking…</div>`;
   const r = await api.post("/api/hint", { session_id: state.session.session_id });
+  state.hintTexts = new Set((r.suggestions || []).map(s => s.japanese));  // sent as-is → counted as "hint"
   h.innerHTML = ((r.suggestions || []).map(s =>
     `<div class="hint-card" data-t="${esc(s.japanese)}">${esc(s.japanese)}` +
     `<span class="en">${esc(s.romaji || "")} — ${esc(s.english || "")}</span></div>`).join("")
@@ -375,14 +376,14 @@ $("#chat-input").addEventListener("keydown", e => {
   if (e.key === "Tab" && imeCands.length) { e.preventDefault(); acceptKanji(imeCands[0]); return; }
   if (e.key === "Enter") submitInput();
 });
-function submitInput(convert = state.kanaInput) {
+function submitInput(convert = state.kanaInput, channel = "text") {
   const inp = $("#chat-input");
   let t = inp.value.trim();
   if (convert) t = wanakana.toKana(t);   // finish a trailing "n" → ん
   if (!t || state.busy) return;
   inp.value = "";
   updateKanjiBar();
-  sendChat(t);
+  sendChat(t, { channel, hint: !!state.hintTexts && state.hintTexts.has(t) });
 }
 
 /* romaji → kana typing (WanaKana): most learners don't have a Japanese keyboard */
@@ -513,7 +514,7 @@ $("#mic-btn").addEventListener("click", async () => {
       fd.append("audio", new Blob([wav], { type: "audio/wav" }), "in.wav");
       const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
       btn.innerHTML = icon("mic");
-      if (r.text) { $("#chat-input").value = r.text; submitInput(false); }  // already Japanese
+      if (r.text) { $("#chat-input").value = r.text; submitInput(false, "voice"); }  // already Japanese
     } catch { btn.innerHTML = icon("mic"); }
     return;
   }
@@ -650,7 +651,7 @@ async function callTurn(text) {
   try {
     const resp = await fetch("/api/chat", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: state.session.session_id, text }),
+      body: JSON.stringify({ session_id: state.session.session_id, text, channel: "voice" }),
     });
     if (!resp.ok) throw new Error((await resp.json()).error || resp.statusText);
     const reader = resp.body.getReader();
@@ -832,6 +833,7 @@ async function loadProgress() {
     stat(`${d.streak}${icon("flame", "accent")}`, "day streak") + stat(d.total_minutes, "minutes practiced") +
     stat(d.sessions_count, "sessions") + stat(d.messages_spoken, "things you said") +
     stat(d.mistakes_logged, "mistakes caught");
+  renderSpeaking(); // async
   state.recentSessions = d.recent_sessions;
   state.sessShown = SESS_PAGE;
   renderRecentSessions();
@@ -840,6 +842,29 @@ async function loadProgress() {
     <div class="mcat"><span class="lbl">${esc(c.category || "other")}</span>
     <div class="bar" style="width:${(c.n / max) * 260}px"></div><span class="n">${c.n}</span></div>`).join("")
     : `<p class="sub">No mistakes logged yet. (That's either very good or very quiet.)</p>`;
+}
+
+/* speaking: known words + grammar you've produced yourself, and the gaps */
+async function renderSpeaking() {
+  const box = $("#speaking");
+  const s = await api.get("/api/speaking").catch(() => null);
+  if (!s || !s.available) {
+    box.innerHTML = `<p class="sub">Build your learner profile first (Settings → Update from Anki).</p>`;
+    return;
+  }
+  const used = s.grammar.filter(g => g.independent).length;
+  const when = t => t ? new Date(t * 1000).toLocaleDateString() : "—";
+  const card = (n, of, l) => `<div class="stat-card"><div class="num">${n}<small> / ${of}</small></div><div class="lbl">${l}</div></div>`;
+  box.innerHTML = `
+    <div class="stat-grid">${card(s.words_said, s.words_total, "words you've said")}${card(used, s.grammar.length, "grammar points used")}</div>
+    <div class="table-wrap"><table class="speak-table">
+      <thead><tr><th>Grammar</th><th>Example</th><th>On your own</th><th>By voice</th><th>Mistakes</th><th>Last used</th></tr></thead>
+      <tbody>${s.grammar.map(g => `<tr class="${g.independent ? "" : "unused"}">
+        <td>${esc(g.name)}</td><td class="ja">${esc(g.example)}</td><td>${g.independent}</td>
+        <td>${g.voice}</td><td>${g.error}</td><td>${when(g.last)}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${s.never_said.length ? `<h3 class="sect">Studied but not said yet</h3>
+      <div class="word-chips">${s.never_said.map(w => `<span class="chip">${esc(w)}</span>`).join("")}</div>` : ""}`;
 }
 
 const SESS_PAGE = 8;

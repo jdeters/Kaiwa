@@ -15,7 +15,8 @@ Return ONLY JSON with this exact shape:
   "errors": [
     {{"wrong": "the incorrect fragment", "right": "the corrected fragment", "explanation": "ONE short English sentence explaining why", "category": "particle|verb form|word choice|word order|politeness|spelling|other"}}
   ],
-  "praise": "ONE short encouraging English sentence about what they did well"
+  "praise": "ONE short encouraging English sentence about what they did well",
+  "normalized": "the student's message exactly as they meant it — the same words, the same mistakes, nothing fixed — but re-spelled in standard Japanese orthography with kanji where normal"
 }}
 
 Rules:

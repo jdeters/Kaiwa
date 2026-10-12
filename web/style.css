@@ -243,6 +243,14 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .stat-card { background: var(--panel); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); text-align: center; }
 .stat-card .num { font-size: 1.8rem; font-weight: 800; color: var(--indigo); }
 .stat-card .lbl { color: var(--sub); font-size: .8rem; margin-top: 4px; }
+.stat-card .num small { font-size: .9rem; color: var(--sub); font-weight: 600; }
+.table-wrap { overflow-x: auto; margin-top: 16px; }
+.speak-table { width: 100%; border-collapse: collapse; font-size: .88rem; background: var(--panel); border-radius: 14px; box-shadow: var(--shadow); }
+.speak-table th, .speak-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.speak-table th { color: var(--sub); font-weight: 600; font-size: .78rem; }
+.speak-table td.ja { white-space: normal; }
+.speak-table tr.unused td { color: var(--sub); }
+.word-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .session-item { background: var(--panel); border-radius: 14px; padding: 14px 18px; margin-bottom: 10px; box-shadow: var(--shadow); }
 .session-item .head { display: flex; justify-content: space-between; font-weight: 700; }
 .session-item .when { color: var(--sub); font-weight: 400; font-size: .8rem; }

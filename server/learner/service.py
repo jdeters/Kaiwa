@@ -11,7 +11,7 @@ import re
 import threading
 from datetime import datetime
 
-from . import display, generate, grammar, ime, validator
+from . import display, generate, grammar, ime, production, validator
 from . import profile as profile_store
 from .profile import SNAPSHOT_PATH, Profile
 
@@ -160,6 +160,50 @@ def ime_table() -> dict:
     if _cache["ime"] is None:
         _cache["ime"] = ime.table(p)
     return _cache["ime"]
+
+
+def observe(normalized: str, prev_partner: str, errors: list, hint: bool) -> list:
+    return production.observe(normalized, profile(), prev_partner, errors, hint)
+
+
+def word_label(word_id: str) -> str:
+    """How a tracked word is shown: kana-only words as kana, others by the kanji rule."""
+    return word_id[len("reading:"):] if word_id.startswith("reading:") else show(word_id)
+
+
+def speaking(stat_rows: list) -> dict:
+    """Speaking progress from db.observation_stats(): which known words and grammar
+    the learner has produced on their own, and which they've studied but never said."""
+    p = profile()
+    if p is None:
+        return {"available": False}
+    items: dict = {}
+    for r in stat_rows:
+        d = items.setdefault((r["kind"], r["item"]),
+                             {**{o: 0 for o in production.OUTCOMES}, "voice": 0, "last": None})
+        d[r["outcome"]] += r["n"]
+        if r["outcome"] == "independent":
+            d["last"] = max(d["last"] or 0, r["last"])
+            if r["channel"] == "voice":
+                d["voice"] += r["n"]
+    words = p.word_list()
+    said = [w for w in words if items.get(("word", w), {}).get("independent")]
+    concepts = _cache["concepts"]
+    gram = []
+    for cid in sorted(p.grammar):
+        c = concepts.get(cid)
+        if not c or c.get("enforced_by") == "vocabulary":
+            continue
+        d = items.get(("grammar", cid), {})
+        gram.append({"id": cid, "name": c["name"], "example": show(c["example"]),
+                     **{k: d.get(k, 0) for k in (*production.OUTCOMES, "voice")},
+                     "last": d.get("last")})
+    return {
+        "available": True,
+        "words_total": len(words), "words_said": len(said),
+        "never_said": [word_label(w) for w in words if w not in said][:60],
+        "grammar": gram,
+    }
 
 
 def check(text: str) -> validator.Result:

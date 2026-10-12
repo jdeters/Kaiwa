@@ -4,6 +4,7 @@ Validation runs on normal kanji-kana text: kana-only input with spaces is
 ambiguous for the tokenizer (ほんが → 其れ), so generation asks for standard
 orthography and the UI converts to kana afterwards.
 """
+import re
 from dataclasses import dataclass
 
 from ..jp import kata_to_hira
@@ -29,6 +30,16 @@ class Tok:
     def content(self) -> bool:
         return self.pos1 in CONTENT_POS
 
+    @property
+    def key(self) -> str:
+        """Word key for vocabulary lists: the lemma, except where UniDic gives a
+        katakana lemma for a kanji word with several readings (金 → キン)."""
+        if _KATAKANA.fullmatch(self.lemma) and any("一" <= c <= "鿿" for c in self.orth):
+            return self.orth
+        return self.lemma
+
+
+_KATAKANA = re.compile(r"[ァ-ヺー]+")
 
 CONTENT_POS = {"名詞", "動詞", "形容詞", "形状詞", "副詞", "代名詞", "連体詞",
                "感動詞", "接頭辞", "接尾辞", "接続詞"}

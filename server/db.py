@@ -38,6 +38,17 @@ CREATE TABLE IF NOT EXISTS messages (
     meta TEXT,                 -- JSON generation details (learner-constrained replies)
     ts REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS observations (  -- what the learner produced (learner/production.py)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL,
+    session_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,        -- word | grammar
+    item TEXT NOT NULL,        -- word id or grammar concept id
+    outcome TEXT NOT NULL,     -- independent | echo | hint | error
+    channel TEXT NOT NULL,     -- text | voice
+    ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS observations_item ON observations(kind, item);
 CREATE TABLE IF NOT EXISTS mistakes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id INTEGER,
@@ -159,7 +170,11 @@ def get_messages(sid: int) -> list:
 def get_message(mid: int) -> dict | None:
     with _conn() as c:
         r = c.execute("SELECT * FROM messages WHERE id=?", (mid,)).fetchone()
-        return dict(r) if r else None
+        if not r:
+            return None
+        d = dict(r)
+        d["meta"] = json.loads(d["meta"]) if d.get("meta") else None
+        return d
 
 
 def set_message_translation(mid: int, translation: str):
@@ -171,6 +186,28 @@ def set_message_correction(mid: int, correction: dict):
     with _conn() as c:
         c.execute("UPDATE messages SET correction=? WHERE id=?",
                   (json.dumps(correction), mid))
+
+
+# ------------------------------------------------------------- observations
+
+def set_observations(mid: int, sid: int, channel: str, obs: list):
+    """Replace a message's observations (a message is analyzed once, but re-runs stay idempotent)."""
+    now = time.time()
+    with _conn() as c:
+        c.execute("DELETE FROM observations WHERE message_id=?", (mid,))
+        c.executemany(
+            "INSERT INTO observations (message_id, session_id, kind, item, outcome, channel, ts) "
+            "VALUES (?,?,?,?,?,?,?)",
+            [(mid, sid, o.kind, o.item, o.outcome, channel, now) for o in obs])
+
+
+def observation_stats() -> list:
+    """Per item: count per outcome and channel, and last independent use."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT kind, item, outcome, channel, COUNT(*) n, MAX(ts) last "
+            "FROM observations GROUP BY kind, item, outcome, channel").fetchall()
+        return [dict(r) for r in rows]
 
 
 # ----------------------------------------------------------------- mistakes

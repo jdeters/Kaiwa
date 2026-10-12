@@ -199,7 +199,9 @@ async def chat(req: Request):
     err = (None if learner.profile() else learner.NO_PROFILE) or llm.not_ready_reason(profile["settings"])
     if err:
         return JSONResponse({"error": err}, status_code=503)
-    user_msg_id = db.add_message(sid, "user", text) if text else None
+    channel = "voice" if body.get("channel") == "voice" else "text"
+    user_msg_id = (db.add_message(sid, "user", text, meta={"channel": channel, "hint": bool(body.get("hint"))})
+                   if text else None)
 
     def gen():
         yield f"data: {json.dumps({'user_message_id': user_msg_id})}\n\n"
@@ -240,11 +242,24 @@ async def correct(req: Request):
         e["right"] = learner.show(e.get("right", ""))
         e["explanation"] = learner.show_quoted(e.get("explanation", ""))
     result["praise"] = learner.show_quoted(result.get("praise", ""))
+    normalized = result.pop("normalized", "") or msg["text"]   # internal: kanji spelling for analysis
     db.set_message_correction(mid, result)
     if result.get("has_errors"):
         for e in result["errors"][:3]:
             db.add_mistake(msg["session_id"], e)
+    _record_production(msg, normalized, result["errors"])
     return result
+
+
+def _record_production(msg: dict, normalized: str, errors: list):
+    """Track which known words and grammar the learner produced in this message."""
+    if learner.profile() is None:
+        return
+    meta = msg.get("meta") or {}
+    earlier = [m for m in db.get_messages(msg["session_id"]) if m["id"] < msg["id"]]
+    prev_partner = next((m["text"] for m in reversed(earlier) if m["role"] == "assistant"), "")
+    obs = learner.observe(normalized, prev_partner, errors, hint=bool(meta.get("hint")))
+    db.set_observations(msg["id"], msg["session_id"], meta.get("channel", "text"), obs)
 
 
 @app.post("/api/translate")
@@ -451,3 +466,9 @@ def api_tts(text: str, voice: str = "", speed: float = 1.0, intonation: float | 
 @app.get("/api/dashboard")
 def dashboard():
     return db.dashboard()
+
+
+@app.get("/api/speaking")
+def speaking():
+    """Which known words and grammar the learner has produced in conversation."""
+    return learner.speaking(db.observation_stats())

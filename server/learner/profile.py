@@ -91,8 +91,17 @@ def build(cfg: dict) -> dict:
         else:
             rec["lesson"] = _min_lesson(rec["lesson"], n)
 
-    def add_reading(kana, meaning, tier, source, n):
-        add_word(f"reading:{kana}", kana, meaning, tier, source, n)
+    def add_reading(kana, meaning, tier, source, n, part=False):
+        """part: not a word in its own right — a fragment of a kana-only entry
+        (ひるごはん → ひる) or a whole multi-word entry (わたしはスミスです).
+        Both still match vocabulary; neither is tracked as a word."""
+        key = f"reading:{kana}"
+        new = key not in words
+        add_word(key, kana, meaning, tier, source, n)
+        if not part:
+            words[key].pop("part", None)
+        elif new:
+            words[key]["part"] = True
 
     def add_entry(text, reading, meaning, tier, source, n, teaches_kanji=False):
         for variant in entry_variants(text):
@@ -106,14 +115,15 @@ def build(cfg: dict) -> dict:
             content = [t for t in toks if t.content and t.pos2 != "数詞"]
             if _has_kanji(variant):
                 for t in content:
-                    add_word(t.lemma, t.lform, meaning if len(content) == 1 else "", tier, source, n)
+                    add_word(t.key, t.lform, meaning if len(content) == 1 else "", tier, source, n)
             else:
                 # Kana-only entries tokenize unreliably (ひるごはん → 蛭 + …), so
                 # trust readings, not guessed lemmas, and match the entry whole.
                 for t in content:
                     if len(t.lform) >= 2:
-                        add_reading(t.lform, meaning if len(content) == 1 else "", tier, source, n)
-                add_reading(_hira(variant), meaning, tier, source, n)
+                        add_reading(t.lform, meaning if len(content) == 1 else "", tier, source, n,
+                                    part=len(content) > 1)
+                add_reading(_hira(variant), meaning, tier, source, n, part=len(content) > 1)
             # Every entry is also licensed whole by its kana: covers multi-word
             # entries (まってください) and compounds the tokenizer splits
             # differently in kanji (ふじさん vs 富士 + 山).
@@ -186,6 +196,15 @@ class Profile:
                 self.readings.setdefault(w["reading"], w)
         self.phrases = [p["kana"] for p in snapshot["phrases"] if len(p["kana"]) >= 2]
         self.kanji = set(snapshot.get("kanji_words", {}))  # written forms shown in kanji
+        # one id per word for tracking: a lemma (飲む), or "reading:…" for words
+        # known only in kana; a kana reading of a known lemma maps to the lemma
+        self.word_ids = {}
+        for w in self.lemmas.values():
+            if w["reading"]:
+                self.word_ids.setdefault(w["reading"], w["lemma"])
+        for w in snapshot["words"]:
+            if w["lemma"].startswith("reading:"):
+                self.word_ids.setdefault(w["reading"], w["lemma"])
         with open(os.path.join(grammar.CONTENT, "closed_class.yaml"), encoding="utf-8") as f:
             self.closed = set(yaml.safe_load(f)["words"])
 
@@ -215,9 +234,33 @@ class Profile:
             return True
         if tok.lemma in self.closed or tok.surface in self.closed:
             return True
-        if tok.lemma in self.lemmas:
+        if tok.key in self.lemmas or tok.lemma in self.lemmas:
             return True
         return bool(tok.lform) and tok.lform in self.readings
+
+    def word_id(self, tok: morph.Tok) -> str | None:
+        """Tracking id of a known content word, or None (unknown words,
+        closed-class words, names, numbers, prefixes/suffixes)."""
+        if not tok.content or tok.pos1 in ("接頭辞", "接尾辞") or tok.pos2 in ("数詞", "固有名詞"):
+            return None
+        if tok.lemma in self.closed or tok.surface in self.closed:
+            return None
+        if tok.key in self.lemmas:
+            return tok.key
+        if tok.lemma in self.lemmas:   # snapshots built before Tok.key
+            return tok.lemma
+        return self.word_ids.get(tok.lform)
+
+    def word_list(self) -> list[str]:
+        """Every tracked word once, lemmas first (Core 2000, by tier), then
+        kana-only textbook words; matching fragments are left out."""
+        rank = {"established": 0, "familiar": 1, "learning": 2, "textbook": 3}
+        ids = sorted({i for i in self.word_ids.values()},
+                     key=lambda i: (i.startswith("reading:"),
+                                    rank.get((self.lemmas.get(i) or {}).get("tier"), 4), i))
+        words = {w["lemma"]: w for w in self.snapshot["words"]}
+        return [i for i in ids if not words.get(i, {}).get("part") and i not in self.closed
+                and words.get(i, {}).get("reading", "x") not in self.closed]
 
     def vocab_for_prompt(self) -> list[str]:
         """Known words for the generation prompt: "lemma(reading)", or bare kana

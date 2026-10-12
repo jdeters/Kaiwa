@@ -134,3 +134,39 @@ def test_ime_conjugation_stems():
     assert t["たかく"] == ["高く"] and t["たかか"] == ["高か"]    # 高くない / 高かった
     assert t["き"] == ["来"] and t["こ"] == ["来"]
     assert "何" in t["なに"] and "何" in t["なん"]
+
+
+# ------------------------------------------------------------- production tracking
+
+def _obs(profile, text, **kw):
+    from server.learner import production
+    return {(o.kind, o.item): o.outcome for o in production.observe(text, profile, **kw)}
+
+
+def test_production_independent_use(profile):
+    o = _obs(profile, "昨日、友達と映画を見ました。")
+    assert o[("word", "見る")] == "independent" and o[("word", "映画")] == "independent"
+    assert o[("grammar", "verb.mashita")] == "independent"
+    assert o[("grammar", "particle.wo.object")] == "independent"
+    assert ("grammar", "particle.ni.destination") not in o      # ambiguous particles skipped
+
+
+def test_production_echo_hint_error(profile):
+    o = _obs(profile, "コーヒーを飲みます。", prev_partner="何を飲みますか。")
+    assert o[("word", "飲む")] == "echo"                         # partner just said it
+    o = _obs(profile, "コーヒーを飲みます。", hint=True)
+    assert set(o.values()) == {"hint"}
+    o = _obs(profile, "コーヒーが飲みました。",
+             errors=[{"wrong": "コーヒーが", "right": "コーヒーを"}])
+    assert o[("word", "飲む")] == "independent"                  # the particle was wrong, not 飲む
+    assert o[("grammar", "verb.mashita")] == "independent"
+
+
+def test_production_flags_wrong_form(profile):
+    o = _obs(profile, "昨日、映画を見ます。", errors=[{"wrong": "みます", "right": "みました"}])
+    assert o[("grammar", "verb.masu")] == "error"
+
+
+def test_word_key_uses_kanji_spelling_for_katakana_lemmas():
+    assert [t.key for t in morph.tokenize("金")] == ["金"]       # UniDic lemma is キン
+    assert [t.key for t in morph.tokenize("テレビ")] == ["テレビ"]  # real katakana words stay
