@@ -12,6 +12,7 @@ import threading
 from datetime import datetime
 
 from . import display, generate, grammar, ime, validator
+from . import profile as profile_store
 from .profile import SNAPSHOT_PATH, Profile
 
 OPENER = "(The scene begins. Say your first line.)"
@@ -39,14 +40,29 @@ def status() -> dict:
     if p is None:
         return {"available": False, "reason": NO_PROFILE}
     snap = p.snapshot
+    book = grammar.load_textbook(snap["textbook"])["textbook"]
     return {
         "available": True,
-        "textbook": grammar.load_textbook(snap["textbook"])["textbook"]["title"],
+        "textbook": book["title"],
+        "lessons_total": book.get("lessons_total", snap["lesson"]),
         "lesson": snap["lesson"],
+        "built_at": snap.get("built_at"),
         "words": len(p.lemmas) + sum(1 for w in snap["words"] if w["lemma"].startswith("reading:")),
         "kanji": len(p.kanji),
         "grammar": len(p.grammar),
     }
+
+
+def rebuild(lesson: int | None = None) -> dict:
+    """Re-import from Anki (optionally after changing the finished lesson).
+    Raises anki.AnkiError if Anki isn't reachable."""
+    cfg = profile_store.load_config()
+    if lesson is not None:
+        cfg["lesson"] = int(lesson)
+    profile_store.save(profile_store.build(cfg))
+    if lesson is not None:   # only once the import worked, so config and profile agree
+        profile_store.set_config_lesson(lesson)
+    return status()   # profile() notices the new snapshot by its mtime
 
 
 def describe() -> str:

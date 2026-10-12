@@ -263,6 +263,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
   border: 2px solid var(--border); border-radius: 10px; font-size: .95rem; outline: none; background: var(--bg);
 }
 .card input[type=text]:focus, .card select:focus { border-color: var(--indigo); }
+.anki-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
 .saved { color: var(--green); font-weight: 700; }
 
 /* --------------------------------------------------------------- modal */

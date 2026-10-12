@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
 from . import backup, db, dictionary, jp, llm, phone, prompts, scenarios, stt, tts
+from .learner import anki
 from .learner import service as learner
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,6 +72,18 @@ def ai_info():
 @app.get("/api/learner")
 def learner_status():
     return learner.status()
+
+
+@app.post("/api/learner/build")
+async def learner_build(req: Request):
+    """Update the learner profile from Anki; body may set {"lesson": n}."""
+    body = await req.json()
+    try:
+        return learner.rebuild(body.get("lesson"))
+    except anki.AnkiError as e:
+        msg = ("Couldn't reach Anki — open Anki (with AnkiConnect installed) and try again."
+               if "can't reach AnkiConnect" in str(e) else f"Anki error: {e}")
+        return JSONResponse({"error": msg}, status_code=503)
 
 
 @app.get("/api/ime")

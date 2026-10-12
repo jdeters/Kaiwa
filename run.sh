@@ -9,8 +9,15 @@ PORT="${KAIWA_PORT:-8130}"
 # first run without setup? be helpful
 [ -d .venv ] || { echo "✗ run ./setup.sh first"; exit 1; }
 
-[ -f data/learner_profile.json ] || \
-  echo "⚠ no learner profile yet — with Anki open, run: .venv/bin/python -m server.learner build"
+# Learner profile: refresh from Anki when it's open, otherwise keep the last one
+if curl -s --max-time 2 http://127.0.0.1:8765 >/dev/null; then
+  echo "▶ updating learner profile from Anki…"
+  .venv/bin/python -m server.learner build | head -1 || true
+elif [ -f data/learner_profile.json ]; then
+  echo "• Anki isn't open — using your last learner profile (Settings → Update from Anki later)"
+else
+  echo "⚠ no learner profile yet — open Anki (with AnkiConnect), then Settings → Update from Anki"
+fi
 
 # 1. VOICEVOX (the tutor's voice; ./setup.sh --with-voicevox installs it on Linux)
 VV=$(ls vendor/linux-*/run vendor/macos-*/run 2>/dev/null | head -1)

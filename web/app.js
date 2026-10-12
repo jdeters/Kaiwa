@@ -109,11 +109,14 @@ async function updateHealth() {
 /* what's missing before you can practice: a learner profile and an API key */
 function updateSetupBanner(h) {
   const missing = [];
-  if (!h.learner.available) missing.push(esc(h.learner.reason));
+  if (!h.learner.available) missing.push(
+    `No learner profile yet. Open Anki (with AnkiConnect), then <button class="btn small" id="banner-sync">Build it from Anki</button> <span id="banner-sync-msg"></span>`);
   if (!h.claude) missing.push("No Anthropic API key — add one in Settings (or ANTHROPIC_API_KEY in .env).");
   const b = $("#setup-banner");
   b.classList.toggle("hidden", !missing.length);
   b.innerHTML = missing.map(m => `${icon("shield-alert")} ${m}`).join("<br>");
+  const btn = $("#banner-sync");
+  if (btn) btn.addEventListener("click", () => ankiSync($("#banner-sync-msg")));
 }
 
 /* ============================================================ onboarding */
@@ -927,9 +930,30 @@ async function loadSettings() {
 async function renderLearnerStatus() {
   const l = await api.get("/api/learner").catch(() => null);
   if (!l) return;
-  $("#learner-status").textContent = !l.available ? l.reason
-    : `${l.textbook}, lesson ${l.lesson} · ${l.grammar} grammar points · ${l.words} words · ${l.kanji} kanji words`;
+  showLearnerStatus(l);
 }
+function showLearnerStatus(l) {
+  const ago = l.built_at ? ` · updated ${new Date(l.built_at * 1000).toLocaleString()}` : "";
+  $("#learner-status").textContent = !l.available ? l.reason
+    : `${l.textbook}, lesson ${l.lesson} · ${l.grammar} grammar points · ${l.words} words · ${l.kanji} kanji words${ago}`;
+  const n = l.lessons_total || 24, cur = l.lesson || 0;
+  $("#set-lesson").innerHTML = Array.from({ length: n }, (_, i) => i + 1)
+    .map(i => `<option value="${i}" ${i === cur ? "selected" : ""}>Lesson ${i}</option>`).join("");
+}
+
+/* re-import vocabulary from Anki (and apply a new "lesson finished") */
+async function ankiSync(msgEl) {
+  msgEl.textContent = "Reading your Anki decks…";
+  const lesson = +$("#set-lesson").value || undefined;
+  const r = await api.post("/api/learner/build", lesson ? { lesson } : {}).catch(e => ({ error: e.message }));
+  if (r.error) { msgEl.textContent = r.error; return false; }
+  msgEl.textContent = "Updated ✓";
+  showLearnerStatus(r);
+  loadIme();          // new kanji → new typing suggestions
+  updateHealth();
+  return true;
+}
+$("#anki-sync").addEventListener("click", () => ankiSync($("#anki-sync-msg")));
 
 async function renderAISettings() {
   const a = await api.get("/api/ai");

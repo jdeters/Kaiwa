@@ -7,6 +7,7 @@ textbook:
   id: jfbp-r4-kana
   title: Japanese for Busy People I (Revised 4th Edition, Kana Version)
   script: kana          # learner reads kana; render unlearned kanji as kana/furigana
+  lessons_total: 24
 
 lessons:
   1:  [copula.desu, copula.desu.question, no.affiliation, topic.omission]

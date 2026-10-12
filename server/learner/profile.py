@@ -25,6 +25,18 @@ _PAREN = re.compile(r"[（(]\s*([^)）]*)\s*[)）]")
 _PUNCT = re.compile(r"[\s。、！？!?.,・〜～「」…]")
 
 
+def set_config_lesson(lesson: int, path: str = CONFIG_PATH):
+    """Update `lesson:` in learner.yaml in place (keeps the file's comments)."""
+    load_config(path)  # creates it from the example if missing
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    text, n = re.subn(r"(?m)^lesson:\s*\d+", f"lesson: {int(lesson)}", text)
+    if not n:
+        text += f"\nlesson: {int(lesson)}\n"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
 def load_config(path: str = CONFIG_PATH) -> dict:
     if not os.path.exists(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)

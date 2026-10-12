@@ -109,8 +109,13 @@
           <h3><svg class="icon"><use href="/static/icons.svg#user-round"/></svg> You</h3>
           <label>Name <input id="set-name" type="text" placeholder="Your name"></label>
           <label>Interests <input id="set-interests" type="text" placeholder="anime, cooking, travel…"></label>
+          <label>Textbook lesson finished <select id="set-lesson"></select></label>
           <p class="sub"><b>What you know</b> (from Anki + your textbook): <span id="learner-status">…</span></p>
-          <p class="sub">After studying, rebuild it with Anki open: <code>.venv/bin/python -m server.learner build</code></p>
+          <div class="anki-row">
+            <button class="btn small" id="anki-sync" type="button"><svg class="icon"><use href="/static/icons.svg#layers"/></svg> Update from Anki</button>
+            <span id="anki-sync-msg" class="sub"></span>
+          </div>
+          <p class="sub">Anki must be open (with AnkiConnect). Reviewed on your phone? Sync Anki desktop first.</p>
         </div>
         <div class="card">
           <h3><svg class="icon"><use href="/static/icons.svg#sparkles"/></svg> AI</h3>
