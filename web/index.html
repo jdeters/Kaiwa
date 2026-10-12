@@ -72,7 +72,9 @@
       <footer class="composer">
         <button id="hint-btn" class="icon-btn big" title="Suggest replies"><svg class="icon"><use href="/static/icons.svg#lightbulb"/></svg></button>
         <button id="mic-btn" class="icon-btn big mic" title="Click to speak"><svg class="icon"><use href="/static/icons.svg#mic"/></svg></button>
-        <input id="chat-input" type="text" placeholder="Type in Japanese (or English)…" autocomplete="off">
+        <button id="kana-btn" class="icon-btn big kana-btn" type="button">あ</button>
+        <input id="chat-input" type="text" placeholder="Type in Japanese (or English)…" autocomplete="off"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
         <button id="send-btn" class="icon-btn big send" title="Send"><svg class="icon"><use href="/static/icons.svg#send-horizontal"/></svg></button>
       </footer>
     </section>
@@ -226,6 +228,7 @@
 <div id="print-report"></div>
 
 <script src="/static/qrcode.js"></script>
+<script src="/static/wanakana.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

@@ -98,6 +98,7 @@ def get_profile():
     s.setdefault("furigana", True)
     s.setdefault("romaji", False)
     s.setdefault("auto_translate", False)
+    s.setdefault("romaji_input", True)
     return p
 
 

@@ -29,6 +29,7 @@ const state = {
   settings: {},
   session: null,      // {session_id, scenario, mode, title}
   busy: false,
+  kanaInput: false,   // romaji → kana typing bound to the chat input
   audio: null,
   catalog: null,
 };
@@ -84,6 +85,7 @@ $("#switch-report").addEventListener("click", () => {
 async function boot() {
   state.profile = await api.get("/api/profile");
   state.settings = state.profile.settings;
+  setKanaInput(state.settings.romaji_input !== false);
   updateHealth();
   setInterval(updateHealth, 20000);
   if (!state.profile.name) startOnboarding();
@@ -364,15 +366,34 @@ $("#hint-btn").addEventListener("click", async () => {
 });
 
 /* composer */
-$("#send-btn").addEventListener("click", submitInput);
+$("#send-btn").addEventListener("click", () => submitInput());
 $("#chat-input").addEventListener("keydown", e => { if (e.key === "Enter") submitInput(); });
-function submitInput() {
+function submitInput(convert = state.kanaInput) {
   const inp = $("#chat-input");
-  const t = inp.value.trim();
+  let t = inp.value.trim();
+  if (convert) t = wanakana.toKana(t);   // finish a trailing "n" → ん
   if (!t || state.busy) return;
   inp.value = "";
   sendChat(t);
 }
+
+/* romaji → kana typing (WanaKana): most learners don't have a Japanese keyboard */
+function setKanaInput(on) {
+  const inp = $("#chat-input"), btn = $("#kana-btn");
+  if (on && !state.kanaInput) wanakana.bind(inp, { IMEMode: true });
+  if (!on && state.kanaInput) wanakana.unbind(inp);
+  state.kanaInput = on;
+  btn.textContent = on ? "あ" : "A";
+  btn.classList.toggle("on", on);
+  btn.title = on ? "Typing romaji → kana (click to type English)" : "Typing English (click for romaji → kana)";
+  inp.placeholder = on ? "Type romaji → かな   nn = ん · - = ー · CAPS = カタカナ"
+                       : "Type in Japanese or English…";
+}
+$("#kana-btn").addEventListener("click", () => {
+  setKanaInput(!state.kanaInput);
+  api.post("/api/settings", { romaji_input: state.kanaInput });
+  $("#chat-input").focus();
+});
 
 /* end session */
 $("#end-session").addEventListener("click", showSessionSummary);
@@ -443,7 +464,7 @@ $("#mic-btn").addEventListener("click", async () => {
       fd.append("audio", new Blob([wav], { type: "audio/wav" }), "in.wav");
       const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
       btn.innerHTML = icon("mic");
-      if (r.text) { $("#chat-input").value = r.text; submitInput(); }
+      if (r.text) { $("#chat-input").value = r.text; submitInput(false); }  // already Japanese
     } catch { btn.innerHTML = icon("mic"); }
     return;
   }

@@ -14,7 +14,8 @@ reply is checked against them before you see it.
 - **Kanji you can read**: words are shown in kanji only if you've learned their
   kanji in Anki (Core 2000); everything else is shown in hiragana.
 
-Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. Also:
+Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. No
+Japanese keyboard needed: type romaji and it becomes kana as you type. Also:
 corrections of what you write, suggested replies (filtered to what you could
 say), translations, tap-a-word lookups, session reports, and progress tracking.
 
@@ -91,6 +92,7 @@ Built on [Kaiwa](https://github.com/yeshsanchez/Kaiwa) by yeshsanchez
 - [VOICEVOX](https://voicevox.hiroshiba.jp/): generated audio must be credited
   per each voice library's terms (e.g. `VOICEVOX:四国めたん`)
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (MIT), Whisper models by OpenAI (MIT)
+- Romaji → kana typing: [WanaKana](https://github.com/WaniKani/WanaKana) (MIT)
 - Icons: [Lucide](https://lucide.dev) (ISC) ·
   QR: [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) (MIT)
 
