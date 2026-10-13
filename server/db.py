@@ -26,7 +26,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     scenario TEXT,             -- JSON of scenario/custom roleplay used
     started_at REAL NOT NULL,
     ended_at REAL,
-    summary TEXT               -- JSON summary
+    summary TEXT,              -- JSON summary
+    targets TEXT               -- JSON practice targets (learner/practice.py)
 );
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,9 +74,13 @@ def init():
         c.executescript(SCHEMA)
         c.execute("INSERT OR IGNORE INTO profile (id) VALUES (1)")
         # databases created before the meta column existed
+        # databases created before these columns existed
         cols = {r["name"] for r in c.execute("PRAGMA table_info(messages)")}
         if "meta" not in cols:
             c.execute("ALTER TABLE messages ADD COLUMN meta TEXT")
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(sessions)")}
+        if "targets" not in cols:
+            c.execute("ALTER TABLE sessions ADD COLUMN targets TEXT")
 
 
 # ------------------------------------------------------------------ profile
@@ -116,11 +121,13 @@ def set_settings(patch: dict):
 
 # ----------------------------------------------------------------- sessions
 
-def create_session(mode: str, scenario_id: str | None, scenario: dict | None) -> int:
+def create_session(mode: str, scenario_id: str | None, scenario: dict | None,
+                   targets: list | None = None) -> int:
     with _conn() as c:
         cur = c.execute(
-            "INSERT INTO sessions (mode, scenario_id, scenario, started_at) VALUES (?,?,?,?)",
-            (mode, scenario_id, json.dumps(scenario) if scenario else None, time.time()),
+            "INSERT INTO sessions (mode, scenario_id, scenario, started_at, targets) VALUES (?,?,?,?,?)",
+            (mode, scenario_id, json.dumps(scenario) if scenario else None, time.time(),
+             json.dumps(targets, ensure_ascii=False) if targets else None),
         )
         return cur.lastrowid
 
@@ -133,6 +140,7 @@ def get_session(sid: int) -> dict | None:
         d = dict(r)
         d["scenario"] = json.loads(d["scenario"]) if d["scenario"] else None
         d["summary"] = json.loads(d["summary"]) if d["summary"] else None
+        d["targets"] = json.loads(d["targets"]) if d.get("targets") else []
         return d
 
 
@@ -174,6 +182,7 @@ def get_message(mid: int) -> dict | None:
             return None
         d = dict(r)
         d["meta"] = json.loads(d["meta"]) if d.get("meta") else None
+        d["correction"] = json.loads(d["correction"]) if d.get("correction") else None
         return d
 
 
@@ -199,6 +208,18 @@ def set_observations(mid: int, sid: int, channel: str, obs: list):
             "INSERT INTO observations (message_id, session_id, kind, item, outcome, channel, ts) "
             "VALUES (?,?,?,?,?,?,?)",
             [(mid, sid, o.kind, o.item, o.outcome, channel, now) for o in obs])
+
+
+def observation_events() -> list:
+    """Every observation as (kind, item, outcome, ts), for practice scheduling."""
+    with _conn() as c:
+        return [tuple(r) for r in c.execute("SELECT kind, item, outcome, ts FROM observations")]
+
+
+def session_observations(sid: int) -> list:
+    with _conn() as c:
+        return [tuple(r) for r in c.execute(
+            "SELECT kind, item, outcome FROM observations WHERE session_id=?", (sid,))]
 
 
 def observation_stats() -> list:

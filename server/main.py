@@ -8,7 +8,7 @@ import os
 import threading
 from datetime import date
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -75,9 +75,8 @@ def learner_status():
 
 
 @app.post("/api/learner/build")
-async def learner_build(req: Request):
+def learner_build(body: dict = Body(...)):
     """Update the learner profile from Anki; body may set {"lesson": n}."""
-    body = await req.json()
     try:
         return learner.rebuild(body.get("lesson"))
     except anki.AnkiError as e:
@@ -167,7 +166,8 @@ async def create_session(req: Request):
                 "setting": c.get("setting", ""), "kind": "roleplay",
             }
             sid_key = "custom"
-    session_id = db.create_session(mode, sid_key, scen)
+    targets = learner.choose_targets(db.observation_events()) if learner.profile() else []
+    session_id = db.create_session(mode, sid_key, scen, targets)
     return {"session_id": session_id, "scenario": scen}
 
 
@@ -207,7 +207,8 @@ async def chat(req: Request):
         yield f"data: {json.dumps({'user_message_id': user_msg_id})}\n\n"
         s = profile["settings"]
         try:
-            r = learner.reply(session, db.get_messages(sid), profile, llm.client(s), llm.model(s))
+            r = learner.reply(session, db.get_messages(sid), profile, llm.client(s), llm.model(s),
+                              db.session_observations(sid))
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
@@ -225,30 +226,48 @@ async def chat(req: Request):
 
 # ------------------------------------------------------- analysis (LLM jobs)
 
+# These call Claude, so they're plain (sync) handlers: FastAPI runs them in a
+# worker thread instead of blocking the event loop (and every other request).
+
+_correct_locks: dict = {}
+_correct_locks_guard = threading.Lock()
+
+
+def _correct_message(msg: dict) -> dict:
+    """Correct a learner message once, and record what it produced. The browser
+    asks after each message and the session report asks for any still pending;
+    the per-message lock makes the second caller reuse the first result."""
+    with _correct_locks_guard:
+        lock = _correct_locks.setdefault(msg["id"], threading.Lock())
+    with lock:
+        current = db.get_message(msg["id"])
+        if current and current.get("correction"):
+            return current["correction"]
+        result = llm.chat_json(
+            prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"]), settings())
+        result.setdefault("has_errors", False)
+        result.setdefault("errors", [])
+        # corrected Japanese follows the same kanji rule as everything else
+        result["corrected"] = learner.show(result.get("corrected", ""))
+        for e in result["errors"]:
+            e["right"] = learner.show(e.get("right", ""))
+            e["explanation"] = learner.show_quoted(e.get("explanation", ""))
+        result["praise"] = learner.show_quoted(result.get("praise", ""))
+        normalized = result.pop("normalized", "") or msg["text"]   # internal: kanji spelling for analysis
+        db.set_message_correction(msg["id"], result)
+        if result.get("has_errors"):
+            for e in result["errors"][:3]:
+                db.add_mistake(msg["session_id"], e)
+        _record_production(msg, normalized, result["errors"])
+        return result
+
+
 @app.post("/api/correct")
-async def correct(req: Request):
-    body = await req.json()
-    mid = body["message_id"]
-    msg = db.get_message(mid)
+def correct(body: dict = Body(...)):
+    msg = db.get_message(body["message_id"])
     if not msg:
         return JSONResponse({"error": "no such message"}, status_code=404)
-    result = llm.chat_json(
-        prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"]), settings())
-    result.setdefault("has_errors", False)
-    result.setdefault("errors", [])
-    # corrected Japanese follows the same kanji rule as everything else
-    result["corrected"] = learner.show(result.get("corrected", ""))
-    for e in result["errors"]:
-        e["right"] = learner.show(e.get("right", ""))
-        e["explanation"] = learner.show_quoted(e.get("explanation", ""))
-    result["praise"] = learner.show_quoted(result.get("praise", ""))
-    normalized = result.pop("normalized", "") or msg["text"]   # internal: kanji spelling for analysis
-    db.set_message_correction(mid, result)
-    if result.get("has_errors"):
-        for e in result["errors"][:3]:
-            db.add_mistake(msg["session_id"], e)
-    _record_production(msg, normalized, result["errors"])
-    return result
+    return _correct_message(msg)
 
 
 def _record_production(msg: dict, normalized: str, errors: list):
@@ -263,8 +282,7 @@ def _record_production(msg: dict, normalized: str, errors: list):
 
 
 @app.post("/api/translate")
-async def translate(req: Request):
-    body = await req.json()
+def translate(body: dict = Body(...)):
     if body.get("message_id"):
         msg = db.get_message(body["message_id"])
         if msg and msg.get("translation"):
@@ -280,9 +298,8 @@ async def translate(req: Request):
 
 
 @app.post("/api/hint")
-async def hint(req: Request):
+def hint(body: dict = Body(...)):
     """Suggested replies, filtered to ones the learner could actually say."""
-    body = await req.json()
     history = prompts.build_hint_history(db.get_messages(body["session_id"]))
     result = llm.chat_json(prompts.HINT_PROMPT.format(learner=learner.describe(), history=history),
                            settings())
@@ -305,8 +322,7 @@ _POS_LABELS = {
 
 
 @app.post("/api/word")
-async def word(req: Request):
-    body = await req.json()
+def word(body: dict = Body(...)):
     w = body.get("word", "").strip()
     sentence = body.get("sentence", "")
     info = jp.word_info(w)
@@ -350,6 +366,13 @@ def end_session(sid: int):
     session = db.get_session(sid)
     if not session:
         return JSONResponse({"error": "no such session"}, status_code=404)
+    # corrections still in flight would be missing from the report and the targets
+    for m in db.get_messages(sid):
+        if m["role"] == "user" and not m.get("correction"):
+            try:
+                _correct_message(m)
+            except Exception:
+                pass   # report without it rather than fail the whole session end
     msgs = db.get_messages(sid)
     transcript = "\n".join(
         f"{'Partner' if m['role'] == 'assistant' else 'Student'}: {m['text']}" for m in msgs
@@ -382,6 +405,7 @@ def end_session(sid: int):
         w["word"] = learner.show(w.get("word", ""))  # new words: no unlearned kanji
     summary["stats"] = {"turns": sum(1 for m in msgs if m["role"] == "user"),
                         "corrections": len(corrections)}
+    summary["targets"] = learner.target_report(session, db.session_observations(sid))
     db.end_session(sid, summary)
     return summary
 
@@ -439,10 +463,10 @@ def dictionary_search(q: str = ""):
 # -------------------------------------------------------------- voice (I/O)
 
 @app.post("/api/stt")
-async def api_stt(audio: UploadFile = File(...), session_id: int | None = Form(None)):
+def api_stt(audio: UploadFile = File(...), session_id: int | None = Form(None)):   # sync: Whisper blocks
     if not stt.available():
         return JSONResponse({"error": "speech model missing — run ./setup.sh"}, status_code=503)
-    data = await audio.read()
+    data = audio.file.read()
     # what the partner just said: short beginner replies are much easier to
     # recognize when Whisper knows what they're answering
     context = ""
@@ -454,9 +478,9 @@ async def api_stt(audio: UploadFile = File(...), session_id: int | None = Form(N
 
 
 @app.post("/api/vad")
-async def api_vad(audio: UploadFile = File(...)):
-    """End-of-turn detection for voice calls: where speech stops in the last few seconds."""
-    return stt.speech_end(await audio.read())
+def api_vad(audio: UploadFile = File(...)):
+    """End-of-turn detection for voice mode: where speech stops in the last few seconds."""
+    return stt.speech_end(audio.file.read())
 
 
 @app.get("/api/tts")
@@ -483,4 +507,4 @@ def dashboard():
 @app.get("/api/speaking")
 def speaking():
     """Which known words and grammar the learner has produced in conversation."""
-    return learner.speaking(db.observation_stats())
+    return learner.speaking(db.observation_stats(), db.observation_events())

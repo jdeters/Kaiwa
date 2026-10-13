@@ -19,6 +19,12 @@ known words and grammar you produced on your own (as opposed to echoing your
 partner, using a hint, or with a mistake), typed or spoken. Progress → Speaking
 shows what you've actually said and what you've studied but never used.
 
+**Speaking practice**: each word and grammar point gets a speaking schedule
+(using it on your own pushes it out; a mistake brings it back). Every
+conversation gets a few targets: recent mistakes, items due, or things you've
+never said. Your partner steers toward them without saying the target words
+itself, and the session report shows which you hit.
+
 Modes: free chat, 36 roleplay scenes plus custom scenes. Any chat can switch
 to hands-free voice mode: just talk, and the reply is spoken back, with the
 same bubbles, corrections, and session report as typing. No
@@ -71,6 +77,7 @@ unzip the engine for your OS into `vendor/`.
 | Draft → check → repair loop | [server/learner/generate.py](server/learner/generate.py) |
 | Kana/kanji display | [server/learner/display.py](server/learner/display.py) |
 | Speaking progress (what you produced) | [server/learner/production.py](server/learner/production.py) |
+| Practice scheduling and targets | [server/learner/practice.py](server/learner/practice.py) |
 | Web app | [server/main.py](server/main.py), [web/](web/) |
 
 Command-line tools:

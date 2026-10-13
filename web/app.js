@@ -466,6 +466,7 @@ async function showSessionSummary() {
       <div class="chip">${icon("pencil")} ${s.stats?.corrections ?? 0} corrections</div>
     </div>
     <p>${esc(s.summary || "")}</p>
+    ${targetsHTML(s.targets)}
     ${s.strengths?.length ? `<h3 class="sect">${icon("trophy")} Strengths</h3><ul class="sum-list">${s.strengths.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     ${s.areas_to_improve?.length ? `<h3 class="sect">${icon("target")} Work on next</h3><ul class="sum-list">${s.areas_to_improve.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     ${s.new_words?.length ? `<h3 class="sect">${icon("sparkles")} Words worth learning</h3>` + s.new_words.map(w =>
@@ -790,6 +791,19 @@ async function loadProgress() {
     : `<p class="sub">No mistakes logged yet. (That's either very good or very quiet.)</p>`;
 }
 
+/* practice targets: what the conversation steered toward, and how it went */
+const TARGET_MARK = { hit: ["✓", "said it"], tried: ["~", "tried — with a mistake"],
+                      assisted: ["·", "only echoed or from a hint"], missed: ["·", "not this time"] };
+function targetsHTML(targets) {
+  if (!targets || !targets.length) return "";
+  return `<h3 class="sect">${icon("target")} Practice targets</h3><div class="targets">` +
+    targets.map(t => {
+      const [mark, what] = TARGET_MARK[t.result] || ["", t.reason];
+      return `<div class="target ${t.result || ""}"><span class="mark">${mark}</span>
+        <span class="lbl">${esc(t.label)}</span><span class="why">${esc(t.result ? what : t.reason)}</span></div>`;
+    }).join("") + `</div>`;
+}
+
 /* speaking: known words + grammar you've produced yourself, and the gaps */
 async function renderSpeaking() {
   const box = $("#speaking");
@@ -803,6 +817,10 @@ async function renderSpeaking() {
   const card = (n, of, l) => `<div class="stat-card"><div class="num">${n}<small> / ${of}</small></div><div class="lbl">${l}</div></div>`;
   box.innerHTML = `
     <div class="stat-grid">${card(s.words_said, s.words_total, "words you've said")}${card(used, s.grammar.length, "grammar points used")}</div>
+    ${s.up_next && s.up_next.length ? `<h3 class="sect">${icon("target")} Up next</h3>
+      <p class="sub">Your next conversation will steer toward a few of these.</p>
+      <div class="targets">${s.up_next.map(t => `<div class="target"><span class="lbl">${esc(t.label)}</span>
+        <span class="why">${esc(t.reason)}</span></div>`).join("")}</div>` : ""}
     <div class="table-wrap"><table class="speak-table">
       <thead><tr><th>Grammar</th><th>Example</th><th>On your own</th><th>By voice</th><th>Mistakes</th><th>Last used</th></tr></thead>
       <tbody>${s.grammar.map(g => `<tr class="${g.independent ? "" : "unused"}">
@@ -839,6 +857,7 @@ function sessionDetailHTML(s) {
   let h = "";
   if (sum.stats) h += `<p class="sub">${sum.stats.turns ?? "?"} turns · ${sum.stats.corrections ?? 0} corrections</p>`;
   if (sum.strengths?.length) h += `<h4>Strengths</h4><ul>${sum.strengths.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  h += targetsHTML(sum.targets);
   if (sum.areas_to_improve?.length) h += `<h4>To improve</h4><ul>${sum.areas_to_improve.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
   if (sum.new_words?.length) h += `<h4>New words</h4><ul>${sum.new_words.map(w =>
     `<li><b>${esc(w.word || "")}</b>${w.reading && w.reading !== w.word ? `（${esc(w.reading)}）` : ""} — ${esc(w.meaning || "")}</li>`).join("")}</ul>`;

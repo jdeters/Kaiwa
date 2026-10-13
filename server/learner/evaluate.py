@@ -7,6 +7,7 @@ The simulated learner is a cheap model playing a beginner; it isn't validated
 """
 import json
 import os
+import random
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -57,9 +58,10 @@ def learner_reply(client, scenario: dict, lesson: int, transcript: list, usage: 
 
 
 def run_conversation(client, profile: Profile, profile_name: str, scenario: dict,
-                     model: str, turns: int, effort: str, concepts: dict) -> dict:
+                     model: str, turns: int, effort: str, concepts: dict, avoid=()) -> dict:
+    from . import production
     partner = generate.Partner(profile, scenario, model=model, effort=effort,
-                               client=client, concepts=concepts)
+                               client=client, concepts=concepts, avoid=set(avoid))
     learner_usage = generate.Usage()
     transcript, records = [], []
     error = None
@@ -72,6 +74,8 @@ def run_conversation(client, profile: Profile, profile_name: str, scenario: dict
                 said = learner_reply(client, scenario, profile.snapshot["lesson"], transcript, learner_usage)
                 transcript.append(("learner", said))
                 partner.learner_says(said)
+                for o in production.observe(said, profile):   # said it → partner may use it now
+                    partner.avoid.discard(o.item)
                 records[-1]["learner_reply"] = said
     except anthropic.APIError as e:
         error = f"{type(e).__name__}: {e}"
@@ -81,6 +85,19 @@ def run_conversation(client, profile: Profile, profile_name: str, scenario: dict
         "partner_usage": asdict(partner.usage), "partner_cost": partner.usage.cost(model),
         "learner_cost": learner_usage.cost(LEARNER_MODEL),
     }
+
+
+def targets_said(profile: Profile, run: dict) -> dict:
+    """Which of the run's targets the simulated learner produced on its own (or echoed)."""
+    from . import production
+    said = {"independent": set(), "echo": set()}
+    for t in run["turns"]:   # each turn: the partner's line, then the learner's reply to it
+        reply = t.get("learner_reply")
+        if reply:
+            for o in production.observe(reply, profile, prev_partner=t["japanese"]):
+                if (o.kind, o.item) in run["targets"] and o.outcome in said:
+                    said[o.outcome].add((o.kind, o.item))
+    return {k: sorted(v) for k, v in said.items()}
 
 
 def summarize(runs: list) -> list:
@@ -106,6 +123,9 @@ def summarize(runs: list) -> list:
             "partner_cost": round(sum(r["partner_cost"] for r in sel), 4),
             "cost_per_turn": round(sum(r["partner_cost"] for r in sel) / len(turns), 5),
             "errors": sum(bool(r["error"]) for r in sel),
+            "salvaged": sum(bool(t.get("salvaged")) for t in turns),
+            "targets_said": round(sum(len(r.get("targets_said", {}).get("independent", [])) for r in sel)
+                                  / max(1, sum(len(r.get("targets", [])) for r in sel)), 3),
         })
     return rows
 
@@ -147,19 +167,35 @@ def transcript_md(runs: list) -> str:
 
 
 def run(models: list, profile_names: list, scenario_ids: list, turns: int = 6,
-        effort: str = "low", workers: int = 6, out_dir: str | None = None) -> str:
+        effort: str = "low", workers: int = 6, out_dir: str | None = None,
+        targets: bool = False) -> str:
+    """targets: give each conversation practice targets, as the app does (picked
+    from the real learner profile, so only meaningful with the "you" profile)."""
     client = anthropic.Anthropic()
     base = Profile.load()
     profiles = eval_profiles(base)
     scenarios = generate.load_scenarios()
     concepts = grammar.load_concepts()
     jobs = [(m, p, s) for m in models for p in profile_names for s in scenario_ids]
-    out_dir = out_dir or os.path.join(DATA, "phase1", time.strftime("%Y%m%d-%H%M%S"))
+    out_dir = out_dir or os.path.join(DATA, "phase1", time.strftime("%Y%m%d-%H%M%S")
+                                      + ("-targets" if targets else "") + f"-{os.getpid()}")
     os.makedirs(out_dir, exist_ok=True)
 
     def job(args):
         m, p, s = args
-        r = run_conversation(client, profiles[p], p, scenarios[s], m, turns, effort, concepts)
+        scen = scenarios[s]
+        # the same targets in both modes (seeded by scenario): with --targets the
+        # partner steers toward them; without, they measure the baseline rate
+        picked = []
+        if p == "you":
+            from . import service
+            picked = service.choose_targets([], random.Random(s))
+            if targets:
+                scen = {**scen, "notes": [service._targets_note(picked)]}
+        avoid = [t["item"] for t in picked if t["kind"] == "word"] if targets else []
+        r = run_conversation(client, profiles[p], p, scen, m, turns, effort, concepts, avoid)
+        r["targets"] = [(t["kind"], t["item"]) for t in picked]
+        r["targets_said"] = targets_said(profiles[p], r)
         ok = sum(t["ok"] for t in r["turns"])
         print(f"  {m:18} {p:8} {s:15} {ok}/{len(r['turns'])} ok  ${r['partner_cost']:.3f}"
               + (f"  ERROR {r['error']}" if r["error"] else ""), flush=True)

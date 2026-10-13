@@ -8,13 +8,14 @@ system message so the cached prefix stays intact.
 """
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, field
 
 import anthropic
 import yaml
 
-from . import display, grammar, validator
+from . import display, grammar, morph, validator
 from .profile import Profile
 
 # $/MTok: input, output, cache read. Cache writes bill at 1.25x input.
@@ -158,14 +159,19 @@ class TurnResult:
     seconds: float = 0.0
     proper_nouns: list = field(default_factory=list)
     reading_fixes: list = field(default_factory=list)  # UniDic readings overridden by the model's
+    salvaged: bool = False   # no draft passed whole; shown text = the sentences that did
 
 
 class Partner:
     """The AI side of one conversation."""
 
     def __init__(self, profile: Profile, scenario: dict, model: str = "claude-opus-5-5",
-                 effort: str = "low", max_attempts: int = 3, client=None, concepts=None):
+                 effort: str = "low", max_attempts: int = 3, client=None, concepts=None,
+                 avoid: set | None = None):
+        """avoid: word ids the partner must not say (practice targets the learner
+        hasn't produced yet — if the partner says them first, the learner copies)."""
         self.profile = profile
+        self.avoid = set(avoid or ())
         self.model = model
         self.effort = effort
         self.max_attempts = max_attempts
@@ -206,18 +212,48 @@ class Partner:
             ts = time.monotonic()
             d = self._draft(extra)
             r = validator.validate(d["japanese"], self.profile, self.concepts)
-            d["violations"] = [str(v) for v in r.violations]
+            d["violations"] = [str(v) for v in r.violations] + self._target_violations(d["japanese"])
             d["seconds"] = round(time.monotonic() - ts, 2)
             d["proper_nouns"] = r.proper_nouns
             drafts.append(d)
             if best is None or len(d["violations"]) < len(best["violations"]):
                 best = d
-            if r.ok:
+            if not d["violations"]:
                 break
-        # Phase 1 measures failures rather than hiding them: if no draft passed,
-        # the least-bad one is used and the turn is marked not ok.
+        if best["violations"]:
+            # No draft passed whole. Drafts are a few short sentences and usually
+            # only one breaks the rules, so show the sentences that do pass.
+            text = self._salvage(sorted(drafts, key=lambda d: len(d["violations"])))
+            self.history.append({"role": "assistant", "content": text})
+            shown = display.render(text, self.profile)
+            return TurnResult(text, "", True, shown.display, drafts,
+                              round(time.monotonic() - t0, 2), [], [], salvaged=True)
         self.history.append({"role": "assistant", "content": best["japanese"]})
         shown = display.render(best["japanese"], self.profile, best.get("reading"))
-        return TurnResult(best["japanese"], best["english"], not best["violations"], shown.display,
+        return TurnResult(best["japanese"], best["english"], True, shown.display,
                           drafts, round(time.monotonic() - t0, 2), best["proper_nouns"],
                           shown.reading_fixes)
+
+    def _target_violations(self, text: str) -> list:
+        if not self.avoid:
+            return []
+        said = {self.profile.word_id(t): t.surface for t in morph.tokenize(text)}
+        return [f"[target] 「{said[w]}」 is a practice target — don't say it; ask so the learner says it"
+                for w in self.avoid if w in said]
+
+    def _salvage(self, drafts: list) -> str:
+        """Valid sentences from the least-bad draft, plus a valid question from
+        another draft if it has none; そうですか。 if nothing passes."""
+        def ok_sentences(d):
+            parts = re.findall(r"[^。！？!?]+[。！？!?]?", d["japanese"])
+            return [p.strip() for p in parts if p.strip()
+                    and validator.validate(p.strip(), self.profile, self.concepts).ok
+                    and not self._target_violations(p.strip())]
+        keep = ok_sentences(drafts[0])
+        backchannel = {"そうですか。", "そうですか", "そうですか？"}       # "I see" — not a question
+        is_q = lambda s: s.endswith(("か。", "？", "?", "か")) and s not in backchannel
+        if not any(is_q(s) for s in keep):
+            q = next((s for d in drafts[1:] for s in ok_sentences(d) if is_q(s) and s not in keep), None)
+            if q:
+                keep.append(q)
+        return "".join(keep) or "そうですか。"

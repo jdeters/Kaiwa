@@ -7,11 +7,13 @@ The other features (corrections, hints, summaries) use show()/check() so
 their Japanese follows the same rules.
 """
 import os
+import random
 import re
 import threading
+import time
 from datetime import datetime
 
-from . import display, generate, grammar, ime, production, validator
+from . import display, generate, grammar, ime, practice, production, validator
 from . import profile as profile_store
 from .profile import SNAPSHOT_PATH, Profile
 
@@ -100,8 +102,79 @@ def scenario_for(session: dict, kaiwa_profile: dict) -> dict:
     if kaiwa_profile.get("interests"):
         notes.append(f"The learner's interests: {kaiwa_profile['interests']}.")
     notes.append("Your replies may be spoken aloud: no emoji, parentheses, or symbols.")
+    if session.get("targets"):
+        notes.append(_targets_note(session["targets"]))
     out["notes"] = notes
     return out
+
+
+# ---------------------------------------------------------------- practice
+
+N_GRAMMAR_TARGETS, N_WORD_TARGETS = 2, 4
+
+
+def _word_meaning(word_id: str) -> str:
+    for w in profile().snapshot["words"]:
+        if w["lemma"] == word_id:
+            return w.get("meaning", "")
+    return ""
+
+
+def choose_targets(events: list, rng: random.Random | None = None) -> list:
+    """Practice targets for a new conversation: a few grammar points and words,
+    picked by practice.pick from the learner's observation history."""
+    p = profile()
+    if p is None:
+        return []
+    concepts = _cache["concepts"]
+    book = grammar.load_textbook(p.snapshot["textbook"])
+    # grammar from the newest lessons first (the least automatic); skip
+    # word-like concepts and the bare copula, which every sentence uses
+    by_lesson = sorted(((int(n), cid) for n, ids in book["lessons"].items() for cid in ids
+                        if cid in p.grammar), reverse=True)
+    gram = [("grammar", cid) for _, cid in by_lesson
+            if concepts.get(cid, {}).get("enforced_by") != "vocabulary" and cid != "copula.desu"]
+    words = [("word", w) for w in p.word_list()]
+    states = practice.replay(events)
+    now = time.time()
+    rng = rng or random.Random()
+    picked = (practice.pick(gram, states, now, N_GRAMMAR_TARGETS, rng)
+              + practice.pick(words, states, now, N_WORD_TARGETS, rng))
+    out = []
+    for (kind, item), reason in picked:
+        if kind == "grammar":
+            c = concepts[item]
+            out.append({"kind": kind, "item": item, "label": c["name"], "meaning": c["gloss"],
+                        "example": c["example"], "reason": reason})
+        else:
+            out.append({"kind": kind, "item": item, "label": word_label(item),
+                        "meaning": _word_meaning(item), "reason": reason})
+    return out
+
+
+def _targets_note(targets: list) -> str:
+    lines = ["PRACTICE TARGETS — things the learner has studied but rarely says. Over the "
+             "conversation, create natural chances for them to use 2–3 of these that fit "
+             "the scene (skip any that don't fit):"]
+    for t in targets:
+        if t["kind"] == "grammar":
+            lines.append(f"- grammar {t['label']}: {t['meaning']} e.g. {t['example']}")
+        else:
+            lines.append(f"- word {t['item'].removeprefix('reading:')}"
+                         + (f" ({t['meaning']})" if t.get("meaning") else ""))
+    lines.append("Ask questions whose natural answer uses a target, one at a time; never mention "
+                 "that these are targets.")
+    lines.append("WORD targets: never say the word yourself before the learner does — if you do, "
+                 "they just copy it. Ask an open question that makes them reach for it. For 大好き: "
+                 "「すしはどうですか。」, not 「すしは大好きですか。」. For 大きい: "
+                 "「どんなかばんですか。」, not 「大きいかばんですか。」.")
+    lines.append("GRAMMAR targets: your question may use the pattern — asking 「昨日、何を"
+                 "しましたか。」 is how you get a past-tense answer.")
+    return "\n".join(lines)
+
+
+def target_report(session: dict, session_obs: list) -> list:
+    return practice.report(session.get("targets") or [], session_obs)
 
 
 def history(db_messages: list) -> list:
@@ -112,19 +185,25 @@ def history(db_messages: list) -> list:
     return msgs
 
 
-def reply(session: dict, db_messages: list, kaiwa_profile: dict, client, model: str) -> dict:
+def reply(session: dict, db_messages: list, kaiwa_profile: dict, client, model: str,
+          session_obs: list = ()) -> dict:
     """Generate one validated partner turn. Returns the original text (stored and
-    spoken), the learner-facing display, chat-UI tokens, and the translation."""
+    spoken), the learner-facing display, chat-UI tokens, and the translation.
+    session_obs: (kind, item, outcome) produced so far — word targets the learner
+    hasn't said yet are off-limits to the partner, so they can't just copy them."""
+    said = {(k, i) for k, i, _ in session_obs}
+    avoid = {t["item"] for t in session.get("targets") or []
+             if t["kind"] == "word" and ("word", t["item"]) not in said}
     partner = generate.Partner(profile(), scenario_for(session, kaiwa_profile), model=model,
-                               client=client, concepts=_cache["concepts"])
+                               client=client, concepts=_cache["concepts"], avoid=avoid)
     partner.history = history(db_messages)
     t = partner.ai_turn()
-    chosen = next(a for a in t.attempts if a["japanese"] == t.japanese)
+    chosen = next((a for a in t.attempts if a["japanese"] == t.japanese), {})   # {} if salvaged
     reading = chosen.get("reading", "")
     return {
         "japanese": t.japanese, "display": t.display, "english": t.english,
         "tokens": tokens(t.japanese, reading),
-        "meta": {"model": model, "ok": t.ok, "seconds": t.seconds,
+        "meta": {"model": model, "ok": t.ok, "salvaged": t.salvaged, "seconds": t.seconds,
                  "drafts": len(t.attempts), "reading": reading,
                  "cost": round(partner.usage.cost(model), 5)},
     }
@@ -169,9 +248,10 @@ def word_label(word_id: str) -> str:
     return word_id[len("reading:"):] if word_id.startswith("reading:") else show(word_id)
 
 
-def speaking(stat_rows: list) -> dict:
+def speaking(stat_rows: list, events: list) -> dict:
     """Speaking progress from db.observation_stats(): which known words and grammar
-    the learner has produced on their own, and which they've studied but never said."""
+    the learner has produced on their own, which they've studied but never said,
+    and what practice would target next (from db.observation_events())."""
     p = profile()
     if p is None:
         return {"available": False}
@@ -200,6 +280,7 @@ def speaking(stat_rows: list) -> dict:
         "available": True,
         "words_total": len(words), "words_said": len(said),
         "never_said": [word_label(w) for w in words if w not in said][:60],
+        "up_next": choose_targets(events, random.Random(0)),
         "grammar": gram,
     }
 

@@ -73,14 +73,15 @@ def cmd_eval(args):
     from . import evaluate, generate
     scenarios = list(generate.load_scenarios()) if args.scenarios == "all" else args.scenarios.split(",")
     out = evaluate.run(args.models.split(","), args.profiles.split(","), scenarios,
-                       turns=args.turns, effort=args.effort, workers=args.workers)
+                       turns=args.turns, effort=args.effort, workers=args.workers,
+                       targets=args.targets)
     summary = json.load(open(os.path.join(out, "summary.json"), encoding="utf-8"))
     print(f"\n{'model':18} {'profile':8} {'turns':>5} {'1st ok':>7} {'final':>6} {'tries':>5} "
-          f"{'med s':>6} {'p90 s':>6} {'$/turn':>8}")
+          f"{'med s':>6} {'p90 s':>6} {'$/turn':>8} {'salvaged':>8} {'targets said':>12}")
     for r in summary["summary"]:
         print(f"{r['model']:18} {r['profile']:8} {r['turns']:5} {r['first_try_ok']:7.1%} "
               f"{r['final_ok']:6.1%} {r['avg_attempts']:5} {r['median_s']:6} {r['p90_s']:6} "
-              f"{r['cost_per_turn']:8.5f}")
+              f"{r['cost_per_turn']:8.5f} {r.get('salvaged', 0):8} {r.get('targets_said', 0):12.1%}")
     print(f"\nsimulated learner cost ${summary['learner_cost']}\n→ {out}")
 
 
@@ -107,6 +108,7 @@ def main():
     e.add_argument("--turns", type=int, default=6)
     e.add_argument("--effort", default="low")
     e.add_argument("--workers", type=int, default=6)
+    e.add_argument("--targets", action="store_true", help="give conversations practice targets")
     e.set_defaults(fn=cmd_eval)
     args = ap.parse_args()
     args.fn(args)

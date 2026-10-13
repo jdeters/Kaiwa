@@ -170,3 +170,66 @@ def test_production_flags_wrong_form(profile):
 def test_word_key_uses_kanji_spelling_for_katakana_lemmas():
     assert [t.key for t in morph.tokenize("金")] == ["金"]       # UniDic lemma is キン
     assert [t.key for t in morph.tokenize("テレビ")] == ["テレビ"]  # real katakana words stay
+
+
+# ------------------------------------------------------------- practice scheduling
+
+def test_practice_intervals():
+    from server.learner import practice
+    D = practice.DAY
+    st = practice.replay([("word", "飲む", "independent", 0),
+                          ("word", "飲む", "independent", 60),          # same sitting: once
+                          ("word", "飲む", "echo", 2 * D),              # exposure: no change
+                          ("word", "飲む", "independent", 2 * D)])[("word", "飲む")]
+    assert st.successes == 2 and st.interval == practice.FIRST_INTERVAL * practice.GROWTH
+    assert st.due == 2 * D + st.interval * D
+    st = practice.replay([("grammar", "verb.mashita", "independent", 0),
+                          ("grammar", "verb.mashita", "independent", 2 * D),
+                          ("grammar", "verb.mashita", "error", 3 * D)])[("grammar", "verb.mashita")]
+    assert st.interval == 2.5 * practice.ERROR_FACTOR      # mistake: 2.5 days → 1 day
+    assert st.due == 4 * D                                  # back the next day
+
+
+def test_practice_pick_priority():
+    import random
+    from server.learner import practice
+    D = practice.DAY
+    events = [("word", "a", "independent", 0),                  # due long ago
+              ("word", "b", "independent", 10 * D),             # not due yet
+              ("word", "c", "error", 9 * D)]                    # mistake, never right
+    cands = [("word", x) for x in "abcde"]
+    picked = practice.pick(cands, practice.replay(events), now=10.5 * D, n=4, rng=random.Random(1))
+    reasons = dict(picked)
+    assert picked[0] == (("word", "c"), "recent mistake")
+    assert reasons[("word", "a")] == "due"
+    assert ("word", "b") not in reasons                         # not due: skipped
+    assert {k for k, r in picked if r == "never said"} <= {("word", "d"), ("word", "e")}
+
+
+def test_practice_report():
+    from server.learner import practice
+    targets = [{"kind": "word", "item": "飲む"}, {"kind": "grammar", "item": "verb.mashita"},
+               {"kind": "word", "item": "見る"}, {"kind": "word", "item": "行く"}]
+    obs = [("word", "飲む", "independent"), ("grammar", "verb.mashita", "error"),
+           ("word", "見る", "echo")]
+    assert [r["result"] for r in practice.report(targets, obs)] == ["hit", "tried", "assisted", "missed"]
+
+
+def test_salvage_keeps_only_valid_sentences(profile):
+    from server.learner import generate
+    p = generate.Partner.__new__(generate.Partner)   # no API client needed for _salvage
+    p.profile, p.concepts, p.avoid = profile, grammar.load_concepts(), set()
+    drafts = [{"japanese": "そうですか。昨日は寒かったですか。"},   # adjective past: not learned
+              {"japanese": "昨日、映画を見ましたか。"}]
+    assert p._salvage(drafts) == "そうですか。昨日、映画を見ましたか。"
+    assert p._salvage([{"japanese": "寒かったです。"}]) == "そうですか。"
+
+
+def test_partner_may_not_say_unproduced_word_targets(profile):
+    from server.learner import generate
+    p = generate.Partner.__new__(generate.Partner)
+    p.profile, p.concepts, p.avoid = profile, grammar.load_concepts(), {"映画"}
+    assert p._target_violations("映画を見ましたか。")             # says the target: rejected
+    assert not p._target_violations("昨日、何を見ましたか。")       # asks for it: fine
+    assert p._salvage([{"japanese": "そうですか。映画は好きですか。"},
+                       {"japanese": "昨日、何を見ましたか。"}]) == "そうですか。昨日、何を見ましたか。"
