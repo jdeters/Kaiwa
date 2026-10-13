@@ -60,6 +60,17 @@ def _pcm16k(wav_bytes: bytes) -> np.ndarray:
     return audio.astype(np.float32)
 
 
+def speech_end(wav_bytes: bytes) -> dict:
+    """Where speech stops in a recent stretch of audio, by Silero VAD (bundled
+    with faster-whisper). A volume threshold can't tell a pause from background
+    noise that the browser's auto-gain has lifted; this can. ~1 ms per second of audio."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+    audio = _pcm16k(wav_bytes)
+    ts = get_speech_timestamps(audio, VadOptions(min_silence_duration_ms=300, speech_pad_ms=0))
+    return {"duration": len(audio) / 16000,
+            "last_speech_end": ts[-1]["end"] / 16000 if ts else None}
+
+
 def transcribe(wav_bytes: bytes, language: str = "ja") -> str:
     segments, _ = load().transcribe(
         _pcm16k(wav_bytes), language=language, beam_size=5,

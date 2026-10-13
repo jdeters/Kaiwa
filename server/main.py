@@ -19,7 +19,7 @@ from .learner import service as learner
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
-MODES = ("free_chat", "roleplay", "call")
+MODES = ("free_chat", "roleplay")   # voice is a mode of any chat, not a session type
 
 app = FastAPI(title="Kaiwa")
 db.init()
@@ -445,6 +445,12 @@ async def api_stt(audio: UploadFile = File(...)):
     data = await audio.read()
     text = stt.transcribe(data)
     return {"text": text}
+
+
+@app.post("/api/vad")
+async def api_vad(audio: UploadFile = File(...)):
+    """End-of-turn detection for voice calls: where speech stops in the last few seconds."""
+    return stt.speech_end(await audio.read())
 
 
 @app.get("/api/tts")

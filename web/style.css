@@ -93,11 +93,8 @@ h1 { font-size: 1.7rem; font-weight: 800; }
 .mode-card:hover { transform: translateY(-2px); border-color: var(--accent); }
 .mode-card.free { background: linear-gradient(135deg, #fdeef1, #fff); }
 .mode-card.custom { background: linear-gradient(135deg, #eeeefa, #fff); }
-.mode-card.call { background: linear-gradient(135deg, #e7f6ef, #fff); }
 .mode-card.free .mode-icon { color: var(--accent); }
 .mode-card.custom .mode-icon { color: var(--indigo); }
-.mode-card.call .mode-icon { color: var(--green); }
-.mode-card.call:hover { border-color: var(--green); }
 .mode-icon { width: 2.1rem; height: 2.1rem; }
 .mode-card h3 { margin: 8px 0 4px; }
 .mode-card p { color: var(--sub); font-size: .9rem; }
@@ -307,64 +304,21 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .new-word-row { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; font-size: .92rem; }
 .new-word-row .w { font-weight: 800; } .new-word-row .m { color: var(--sub); flex: 1; }
 
-/* ---------------------------------------------------------- voice call */
-.call-overlay {
-  position: fixed; inset: 0; z-index: 70;
-  background: linear-gradient(165deg, #322d3d, #1d1a24 55%, #262031);
-  color: #f5f2ee; display: flex; flex-direction: column;
-  padding: calc(18px + env(safe-area-inset-top)) 24px calc(28px + env(safe-area-inset-bottom));
+/* ---------------------------------------------------------- voice mode */
+.icon-btn.voice-btn.on { background: var(--green); color: #fff; }
+.voice-bar {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  max-width: 812px; margin: 6px auto 0; width: calc(100% - 48px);
+  padding: 9px 16px; border-radius: 999px; font-weight: 700; font-size: .9rem;
+  background: var(--panel); box-shadow: var(--shadow); color: var(--sub);
 }
-.call-head { display: flex; justify-content: space-between; font-weight: 700; opacity: .85; }
-#call-timer { font-variant-numeric: tabular-nums; opacity: .7; }
-.call-stage {
-  flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 24px; text-align: center;
-}
-.call-avatar {
-  position: relative; width: 150px; height: 150px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #a04a8f);
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  box-shadow: 0 8px 44px rgba(232, 93, 117, .35);
-  transition: background .3s, box-shadow .3s, filter .3s;
-}
-.call-face { font-size: 2rem; font-weight: 800; }
-.ring {
-  position: absolute; inset: 0; border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, .4); opacity: 0; pointer-events: none;
-}
-.call-avatar.speaking .r1 { animation: ringout 1.6s ease-out infinite; }
-.call-avatar.speaking .r2 { animation: ringout 1.6s .8s ease-out infinite; }
-.call-avatar.listening, .call-avatar.listening.live {
-  background: linear-gradient(135deg, var(--green), #2b7c59);
-  box-shadow: 0 8px 44px rgba(58, 166, 117, .4);
-}
-.call-avatar.listening.live .r1 { animation: ringout 1.1s ease-out infinite; border-color: rgba(150, 255, 200, .55); }
-.call-avatar.listening.live .r2 { animation: ringout 1.1s .55s ease-out infinite; border-color: rgba(150, 255, 200, .55); }
-.call-avatar.thinking { filter: saturate(.35) brightness(.75); }
-.call-avatar.thinking .call-face { animation: breathe 1.6s ease-in-out infinite; }
-.call-avatar.muted { background: #575260; box-shadow: none; }
-@keyframes ringout { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(1.55); opacity: 0; } }
+.voice-bar .icon { flex-shrink: 0; }
+.voice-bar.listening { color: var(--green); }
+.voice-bar.listening.live { background: var(--green); color: #fff; }
+.voice-bar.listening.live .icon { animation: breathe 1s ease-in-out infinite; }
+.voice-bar.thinking .icon { animation: breathe 1.6s ease-in-out infinite; }
+.voice-bar.speaking { color: var(--indigo); }
 @keyframes breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
-.call-status { font-weight: 700; font-size: 1rem; opacity: .9; min-height: 1.4em; }
-.call-caption { max-width: 560px; min-height: 3.4em; line-height: 1.9; font-size: 1.15rem; color: rgba(255, 255, 255, .88); }
-.call-caption.user { color: #b9b2c9; font-style: italic; font-size: 1rem; }
-.call-caption .you {
-  color: #9fe8c4; font-weight: 700; font-style: normal; font-size: .78em;
-  border: 1px solid rgba(159, 232, 196, .4); border-radius: 6px; padding: 1px 6px; margin-right: 4px;
-}
-.call-overlay.no-cc .call-caption { visibility: hidden; }
-.call-controls { display: flex; justify-content: center; align-items: center; gap: 26px; }
-.call-btn {
-  width: 60px; height: 60px; border-radius: 50%; border: none;
-  background: rgba(255, 255, 255, .13); color: #fff; transition: background .15s;
-}
-.call-btn .icon { width: 24px; height: 24px; }
-.call-btn:hover { background: rgba(255, 255, 255, .24); }
-.call-btn.active { outline: 2px solid rgba(255, 255, 255, .45); outline-offset: 2px; }
-.call-btn.muted-on { background: var(--amber); color: #2d2a32; }
-.call-btn.hangup { background: #e14b4b; width: 72px; height: 72px; }
-.call-btn.hangup .icon { width: 28px; height: 28px; }
-.call-btn.hangup:hover { background: #c93a3a; }
 
 /* ------------------------------------------------- session reports */
 .session-item.expandable { cursor: pointer; }
@@ -378,7 +332,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 #print-report { display: none; }
 @media print {
   html, body { height: auto; overflow: visible; }
-  #app, .modal, .call-overlay, .popup { display: none !important; }
+  #app, .modal, .popup { display: none !important; }
   #print-report { display: block; font-size: 12pt; line-height: 1.7; }
   #print-report h1 { font-size: 16pt; margin-bottom: 4pt; }
   #print-report .meta { color: #666; margin-bottom: 12pt; }
@@ -444,5 +398,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
   .chat-tools .mini-toggle { font-size: .72rem; }
   .composer { padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); gap: 7px; }
   .kanji-bar { padding: 0 12px; }
+  .voice-bar { width: calc(100% - 24px); }
+  .composer .icon-btn.big { width: 40px; height: 40px; font-size: 1.05rem; }   /* 5 buttons + input */
   .resume-pill { bottom: calc(70px + env(safe-area-inset-bottom)); }  /* above the tab bar */
 }

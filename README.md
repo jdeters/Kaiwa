@@ -19,7 +19,9 @@ known words and grammar you produced on your own (as opposed to echoing your
 partner, using a hint, or with a mistake), typed or spoken. Progress → Speaking
 shows what you've actually said and what you've studied but never used.
 
-Modes: free chat, 36 roleplay scenes plus custom scenes, and voice calls. No
+Modes: free chat, 36 roleplay scenes plus custom scenes. Any chat can switch
+to hands-free voice mode: just talk, and the reply is spoken back, with the
+same bubbles, corrections, and session report as typing. No
 Japanese keyboard needed: type romaji and it becomes kana as you type, then
 pick kanji for the words whose kanji you've learned (Tab or click), which is
 also kanji recall practice. Also:

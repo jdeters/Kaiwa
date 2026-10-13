@@ -263,7 +263,7 @@ def dashboard() -> dict:
             recent.append({
                 "id": s["id"], "mode": s["mode"],
                 "title": (scen or {}).get(
-                    "title", "Voice Call" if s["mode"] == "call" else "Free Chat"),
+                    "title", "Voice Call" if s["mode"] == "call" else "Free Chat"),  # "call": older sessions
                 "started_at": s["started_at"],
                 "minutes": round((s["ended_at"] - s["started_at"]) / 60, 1),
                 "summary": summ,
