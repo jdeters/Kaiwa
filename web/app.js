@@ -518,6 +518,7 @@ $("#mic-btn").addEventListener("click", async () => {
     try {
       const fd = new FormData();
       fd.append("audio", new Blob([wav], { type: "audio/wav" }), "in.wav");
+      if (state.session) fd.append("session_id", state.session.session_id);   // context for recognition
       const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
       btn.innerHTML = icon("mic");
       if (r.text) { $("#chat-input").value = r.text; submitInput(false, "voice"); }  // already Japanese
@@ -757,6 +758,7 @@ async function finishUtterance() {
   try {
     const fd = new FormData();
     fd.append("audio", new Blob([encodeWav(v.chunks, voice.mic.rate)], { type: "audio/wav" }), "in.wav");
+    if (state.session) fd.append("session_id", state.session.session_id);   // context for recognition
     const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
     text = (r.text || "").trim();
   } catch { /* fall through to retry */ }

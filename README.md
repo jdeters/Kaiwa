@@ -53,9 +53,9 @@ whenever you've studied more.
 ```
 
 Voice: speech recognition is [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-running locally: the small model by default (~1.5 s per sentence on a laptop
-CPU); set `KAIWA_WHISPER_MODEL=medium` or `large-v3-turbo` for more accuracy
-at 2–4× the wait. The partner's voice is
+running locally: the medium model by default (~3.5 s per reply on a laptop
+CPU), given your partner's last line as context. `KAIWA_WHISPER_MODEL=small`
+is about twice as fast but much less reliable on noisy or accented speech. The partner's voice is
 the [VOICEVOX](https://voicevox.hiroshiba.jp/) engine, also local.
 `--with-voicevox` downloads the Linux x64 build (~1.8 GB); on other platforms,
 unzip the engine for your OS into `vendor/`.

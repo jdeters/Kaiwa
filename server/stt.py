@@ -1,7 +1,8 @@
 """Speech-to-text with faster-whisper (CTranslate2, int8 on CPU).
 
-The model (small by default; KAIWA_WHISPER_MODEL=medium or large-v3-turbo for
-more accuracy at 2-4x the latency on a laptop CPU) is
+The model (medium by default: on a laptop CPU, small is ~2x faster but drifts
+badly on noisy or accented speech, and large-v3-turbo is ~1.7x slower without
+being more accurate here; KAIWA_WHISPER_MODEL overrides) is
 downloaded into models/whisper by setup.sh and loaded once, on first use or
 by warm() at server start. Input is a 16-bit PCM WAV (the browser sends 16 kHz mono).
 """
@@ -17,7 +18,7 @@ import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(ROOT, "models", "whisper")
-MODEL_NAME = os.environ.get("KAIWA_WHISPER_MODEL", "small")
+MODEL_NAME = os.environ.get("KAIWA_WHISPER_MODEL", "medium")
 
 _model = None
 _lock = threading.Lock()
@@ -71,11 +72,14 @@ def speech_end(wav_bytes: bytes) -> dict:
             "last_speech_end": ts[-1]["end"] / 16000 if ts else None}
 
 
-def transcribe(wav_bytes: bytes, language: str = "ja") -> str:
+def transcribe(wav_bytes: bytes, language: str = "ja", context: str = "") -> str:
+    """context: the conversation so far (the partner's last line). Passed as
+    Whisper's prompt, it steers ambiguous sounds toward words that fit."""
     segments, _ = load().transcribe(
         _pcm16k(wav_bytes), language=language, beam_size=5,
         vad_filter=True,                   # skip silence: whisper hallucinates on it
         condition_on_previous_text=False,
+        initial_prompt=context or None,
     )
     text = "".join(s.text for s in segments).strip()
     # strip bracketed non-speech artifacts like [音楽], (笑い)

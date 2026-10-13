@@ -8,7 +8,7 @@ import os
 import threading
 from datetime import date
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -439,11 +439,17 @@ def dictionary_search(q: str = ""):
 # -------------------------------------------------------------- voice (I/O)
 
 @app.post("/api/stt")
-async def api_stt(audio: UploadFile = File(...)):
+async def api_stt(audio: UploadFile = File(...), session_id: int | None = Form(None)):
     if not stt.available():
         return JSONResponse({"error": "speech model missing — run ./setup.sh"}, status_code=503)
     data = await audio.read()
-    text = stt.transcribe(data)
+    # what the partner just said: short beginner replies are much easier to
+    # recognize when Whisper knows what they're answering
+    context = ""
+    if session_id:
+        context = next((m["text"] for m in reversed(db.get_messages(session_id))
+                        if m["role"] == "assistant"), "")
+    text = stt.transcribe(data, context=context)
     return {"text": text}
 
 

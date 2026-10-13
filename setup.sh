@@ -19,7 +19,7 @@ echo "▶ installing dependencies…"
 
 mkdir -p data models
 
-# speech-recognition model for faster-whisper (small, ~480 MB; KAIWA_WHISPER_MODEL overrides)
+# speech-recognition model for faster-whisper (medium, ~1.5 GB; KAIWA_WHISPER_MODEL overrides)
 if [ -z "$(find models/whisper -name model.bin 2>/dev/null)" ]; then
   echo "▶ downloading speech-recognition model…"
   .venv/bin/python -c "from server import stt; stt.load()"
