@@ -199,9 +199,10 @@ def set_message_correction(mid: int, correction: dict):
 
 # ------------------------------------------------------------- observations
 
-def set_observations(mid: int, sid: int, channel: str, obs: list):
-    """Replace a message's observations (a message is analyzed once, but re-runs stay idempotent)."""
-    now = time.time()
+def set_observations(mid: int, sid: int, channel: str, obs: list, ts: float | None = None):
+    """Replace a message's observations (a message is analyzed once, but re-runs stay
+    idempotent). ts: when the learner said it — the practice schedule depends on it."""
+    now = ts or time.time()
     with _conn() as c:
         c.execute("DELETE FROM observations WHERE message_id=?", (mid,))
         c.executemany(

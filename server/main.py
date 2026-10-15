@@ -304,7 +304,7 @@ def _record_production(msg: dict, normalized: str, errors: list, particles=(), u
     prev_partner = next((m["text"] for m in reversed(earlier) if m["role"] == "assistant"), "")
     obs = learner.observe(normalized, prev_partner, errors, hint=bool(meta.get("hint")),
                           particles=particles, uncertain=uncertain)
-    db.set_observations(msg["id"], msg["session_id"], meta.get("channel", "text"), obs)
+    db.set_observations(msg["id"], msg["session_id"], meta.get("channel", "text"), obs, ts=msg["ts"])
 
 
 @app.post("/api/translate")
