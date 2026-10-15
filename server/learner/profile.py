@@ -77,6 +77,8 @@ def build(cfg: dict) -> dict:
     textbook = grammar.load_textbook(cfg["textbook"])
     lesson = int(cfg["lesson"])
     words: dict = {}     # lemma → record
+    whole_kana: set = set()   # readings of whole kana-only entries
+    pieces: list = []         # readings of pieces of kana-only entries, pending corroboration
     kanji: dict = {}     # written form (orthBase) → source, for words whose kanji is known
     kanji_min = TIER_RANK[cfg.get("kanji_min_tier", "familiar")]
     phrases: dict = {}   # hiragana → record
@@ -117,13 +119,18 @@ def build(cfg: dict) -> dict:
                 for t in content:
                     add_word(t.key, t.lform, meaning if len(content) == 1 else "", tier, source, n)
             else:
-                # Kana-only entries tokenize unreliably (ひるごはん → 蛭 + …), so
-                # trust readings, not guessed lemmas, and match the entry whole.
+                # Kana-only entries tokenize unreliably (かいしゃ → か + いしゃ "doctor",
+                # よやく → よ + やく), so trust readings, not guessed lemmas, and match
+                # the entry whole. Its pieces wait for corroboration (below).
+                add_reading(_hira(variant), meaning, tier, source, n, part=len(content) > 1)
+                whole_kana.add(_hira(variant))
+                verb_form = (len(content) == 1 and toks[0] is content[0]
+                             and content[0].pos1 in ("動詞", "形容詞")
+                             and all(t.pos1 in ("助動詞", "助詞") for t in toks[1:]))
                 for t in content:
                     if len(t.lform) >= 2:
-                        add_reading(t.lform, meaning if len(content) == 1 else "", tier, source, n,
-                                    part=len(content) > 1)
-                add_reading(_hira(variant), meaning, tier, source, n, part=len(content) > 1)
+                        pieces.append((t.lform, meaning if len(content) == 1 else "", tier, source, n,
+                                       len(content) > 1, verb_form))
             # Every entry is also licensed whole by its kana: covers multi-word
             # entries (まってください) and compounds the tokenizer splits
             # differently in kanji (ふじさん vs 富士 + 山).
@@ -164,6 +171,15 @@ def build(cfg: dict) -> dict:
             add_entry(text, reading, meaning, tier, src["deck"], n, src.get("kanji", False))
             n_used += 1
         stats[src["deck"]] = n_used
+
+    # A piece of a kana-only entry counts only if something backs it up: it's a
+    # whole entry itself (ひる from ひるごはん), the reading of a word learned
+    # with its kanji (いく for 行く), or the entry is a verb/adjective plus
+    # endings (いきます → いく). Misparse leftovers (いしゃ, やく) are dropped.
+    lemma_readings = {w["reading"] for k, w in words.items() if not k.startswith("reading:")}
+    for kana, meaning, tier, source, n, part, verb_form in pieces:
+        if verb_form or kana in whole_kana or kana in lemma_readings:
+            add_reading(kana, meaning, tier, source, n, part=part)
 
     return {
         "built_at": time.time(),

@@ -268,3 +268,26 @@ def test_misheard_exclusion_is_positional(profile):
              particles=[{"particle": "に", "use": "ni.destination"}, {"particle": "に", "use": "ni.destination"}])
     assert o.get(("grammar", "particle.ni.destination")) == "independent"
     assert ("word", "映画") not in o and o[("word", "家")] == "independent"
+
+
+def test_build_drops_misparsed_pieces_of_kana_entries(monkeypatch):
+    from server.learner import anki, profile as P
+    note = iter(range(1, 100))
+
+    def card(fields, deck, typ=2):
+        return {"note": next(note), "fields": {k: {"value": v} for k, v in fields.items()},
+                "type": typ, "interval": 30, "deckName": deck}
+    decks = {
+        "Core": [card({"W": "行く", "R": "いく", "M": "go"}, "Core")],
+        "JFBP": [card({"K": k, "E": ""}, "JFBP::Lesson 3", typ=0)
+                 for k in ("かいしゃ", "よやく", "いきます", "ひるごはん", "ひる", "ごはん")],
+    }
+    monkeypatch.setattr(anki, "deck_cards", lambda deck, url=None: decks[deck])
+    cfg = {"textbook": "jfbp-r4-kana", "lesson": 10, "sources": [
+        {"deck": "Core", "word_field": "W", "reading_field": "R", "meaning_field": "M",
+         "include": "studied", "kanji": True},
+        {"deck": "JFBP", "word_field": "K", "meaning_field": "E", "include": "lessons",
+         "lesson_pattern": r"Lesson (\d+)"}]}
+    readings = {w["reading"] for w in P.build(cfg)["words"]}
+    assert {"かいしゃ", "よやく", "いく", "ひる", "ごはん"} <= readings
+    assert "いしゃ" not in readings and "やく" not in readings     # misparse leftovers
