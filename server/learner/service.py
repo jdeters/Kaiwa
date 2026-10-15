@@ -6,6 +6,7 @@ and only then sent — with kanji shown only for words the learner can read.
 The other features (corrections, hints, summaries) use show()/check() so
 their Japanese follows the same rules.
 """
+import json
 import os
 import random
 import re
@@ -86,7 +87,7 @@ def _time_of_day() -> str:
 def scenario_for(session: dict, kaiwa_profile: dict) -> dict:
     """Map a Kaiwa session to a learner.generate scenario."""
     scen = session.get("scenario") or {}
-    if session["mode"] == "roleplay" and scen:
+    if session["mode"] in ("roleplay", "practice") and scen:
         out = {"title": scen.get("title", "Roleplay"), "setting": scen.get("setting", ""),
                "ai_role": scen.get("ai_role", ""), "user_role": scen.get("user_role", ""),
                "goal": scen.get("description", "")}
@@ -95,8 +96,10 @@ def scenario_for(session: dict, kaiwa_profile: dict) -> dict:
                "ai_role": "A friendly Japanese friend who is curious about the learner.",
                "user_role": "The learner.",
                "goal": "Chat about the learner's day, work, hobbies, and plans."}
-    notes = [f"It is currently {_time_of_day()} for the learner; greet accordingly, and only "
-             "in your first line."]
+    # free chat happens in real time; roleplay and practice scenes set their own
+    notes = ([f"It is currently {_time_of_day()} for the learner; greet accordingly, and only "
+              "in your first line."] if not scen or session["mode"] == "free_chat"
+             else ["Greet as fits the scene's setting, and only in your first line."])
     if kaiwa_profile.get("name"):
         notes.append(f"The learner's name is {kaiwa_profile['name']}.")
     if kaiwa_profile.get("interests"):
@@ -150,6 +153,59 @@ def choose_targets(events: list, rng: random.Random | None = None) -> list:
             out.append({"kind": kind, "item": item, "label": word_label(item),
                         "meaning": _word_meaning(item), "reason": reason})
     return out
+
+
+SCENE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "setting": {"type": "string"},
+        "ai_role": {"type": "string"},
+        "user_role": {"type": "string"},
+        "goal": {"type": "string"},
+        "intro": {"type": "string"},
+        "targets": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["title", "setting", "ai_role", "user_role", "goal", "intro", "targets"],
+    "additionalProperties": False,
+}
+
+
+def design_scene(targets: list, client, model: str) -> tuple:
+    """A short roleplay built so that 3–4 of the targets come up naturally.
+    Returns (scenario dict for the session, the targets it uses)."""
+    listed = "\n".join(
+        f"- {t['item']}: {t['label']} — {t['meaning']}" + (f" (e.g. {t['example']})" if t.get("example") else "")
+        for t in targets)
+    prompt = f"""Design a short everyday roleplay for a Japanese learner: {describe()}.
+
+These are things the learner has studied but rarely says (id: what it is):
+{listed}
+
+Pick 3–4 of them that could all come up naturally in ONE plausible, simple everyday situation
+(include at least one grammar item if any fits), and design that situation so the learner
+will need to say them. The partner (a Japanese speaker) starts the conversation; the learner
+replies using only beginner Japanese.
+
+Return JSON:
+- title: short scene title in English
+- setting: one sentence, where and when
+- ai_role: who the partner plays
+- user_role: who the learner plays
+- goal: what the learner needs to get across (for the partner; may name the targets)
+- intro: 2–3 sentences of ENGLISH, addressed to the learner as "you", setting the scene and
+  saying what they want to tell or ask. Describe it in English only — never give the Japanese
+  words; working them out is the practice.
+- targets: the ids you chose, exactly as listed"""
+    resp = generate.create_message(
+        client, model, max_tokens=4000,
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCENE_SCHEMA}},
+        messages=[{"role": "user", "content": prompt}])
+    scene = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    picked = set(scene.pop("targets", None) or ())
+    chosen = [t for t in targets if t["item"] in picked] or targets   # none named: keep all
+    scene.update(id="practice", kind="practice", description=scene["goal"])
+    return scene, chosen
 
 
 def _targets_note(targets: list) -> str:

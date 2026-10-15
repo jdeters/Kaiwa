@@ -23,11 +23,14 @@ shows what you've actually said and what you've studied but never used.
 (using it on your own pushes it out; a mistake brings it back). Every
 conversation gets a few targets: recent mistakes, items due, or things you've
 never said. Your partner steers toward them without saying the target words
-itself, and the session report shows which you hit.
+itself, and the session report shows which you hit. **Practice** goes a step further:
+it designs a short scene around your targets and opens with the situation in
+English (what you want to get across, never the Japanese), so the targets are
+the natural thing to say.
 
-Modes: free chat, 36 roleplay scenes plus custom scenes. Any chat can switch
-to hands-free voice mode: just talk, and the reply is spoken back, with the
-same bubbles, corrections, and session report as typing. No
+Modes: free chat, 36 roleplay scenes plus custom scenes. Speak instead of
+typing: tap the mic, talk, and when you pause your words land in the text box to
+check and send (the reply is spoken back if auto-play is on). No
 Japanese keyboard needed: type romaji and it becomes kana as you type, then
 pick kanji for the words whose kanji you've learned (Tab or click), which is
 also kanji recall practice. Also:

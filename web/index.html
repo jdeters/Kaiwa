@@ -38,9 +38,13 @@
       <div id="setup-banner" class="setup-banner hidden"></div>
 
       <div class="mode-cards">
+        <div class="mode-card practice" id="card-practice">
+          <svg class="icon mode-icon"><use href="/static/icons.svg#target"/></svg>
+          <h3>Practice</h3><p>A scene built around words and grammar you know but rarely say.</p>
+        </div>
         <div class="mode-card free" id="card-free">
           <svg class="icon mode-icon"><use href="/static/icons.svg#message-circle"/></svg>
-          <h3>Free Chat</h3><p>Talk about anything. Type, or switch on voice mode and just speak.</p>
+          <h3>Free Chat</h3><p>Talk about anything — type, or tap the mic and speak.</p>
         </div>
         <div class="mode-card custom" id="card-custom">
           <svg class="icon mode-icon"><use href="/static/icons.svg#drama"/></svg>
@@ -69,8 +73,7 @@
       <div id="voice-bar" class="voice-bar hidden"><svg class="icon"><use href="/static/icons.svg#mic"/></svg> <span id="voice-status"></span></div>
       <footer class="composer">
         <button id="hint-btn" class="icon-btn big" title="Suggest replies"><svg class="icon"><use href="/static/icons.svg#lightbulb"/></svg></button>
-        <button id="voice-btn" class="icon-btn big voice-btn" type="button" title="Voice mode: just talk, hands-free"><svg class="icon"><use href="/static/icons.svg#phone"/></svg></button>
-        <button id="mic-btn" class="icon-btn big mic" title="Dictate one message"><svg class="icon"><use href="/static/icons.svg#mic"/></svg></button>
+        <button id="mic-btn" class="icon-btn big mic" title="Speak — your words go in the text box to check and send"><svg class="icon"><use href="/static/icons.svg#mic"/></svg></button>
         <button id="kana-btn" class="icon-btn big kana-btn" type="button">あ</button>
         <input id="chat-input" type="text" placeholder="Type in Japanese (or English)…" autocomplete="off"
                autocapitalize="off" autocorrect="off" spellcheck="false">

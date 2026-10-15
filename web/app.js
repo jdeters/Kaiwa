@@ -39,7 +39,7 @@ function show(view) {
   $$(".view").forEach(v => v.classList.add("hidden"));
   $(`#view-${view}`).classList.remove("hidden");
   $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
-  if (view !== "chat") stopVoice();   // never leave the mic on outside the chat
+  if (view !== "chat" && dict.listening) cancelDictation();   // never leave the mic on outside the chat
   if (view === "home") loadHome();
   if (view === "dict") $("#dict-search").focus();
   if (view === "progress") loadProgress();
@@ -165,6 +165,7 @@ function scenCard(s) {
 }
 
 $("#card-free").addEventListener("click", () => startSession("free_chat", {}));
+$("#card-practice").addEventListener("click", () => startSession("practice", {}));
 $("#card-custom").addEventListener("click", () => $("#custom-modal").classList.remove("hidden"));
 $("#cr-cancel").addEventListener("click", () => $("#custom-modal").classList.add("hidden"));
 $("#cr-start").addEventListener("click", () => {
@@ -180,18 +181,49 @@ $("#cr-start").addEventListener("click", () => {
 /* ================================================================== chat */
 async function startSession(mode, opts) {
   if (state.session) return guardActiveSession(() => startSession(mode, opts));
-  const res = await api.post("/api/sessions", { mode, ...opts });
-  state.session = { ...res, mode };
-  const scen = res.scenario;
-  $("#chat-title").textContent = scen ? `${scen.title}` : "Free Chat 💬";
-  $("#chat-sub").textContent = scen ? (scen.setting || scen.description || "") : "Talk about anything!";
-  $("#messages").innerHTML = "";
   $("#hints").classList.add("hidden");
   $("#tgl-furigana").checked = state.settings.furigana !== false;
   $("#tgl-romaji").checked = !!state.settings.romaji;
   applyReadingToggles();
+  if (mode === "practice") {   // designing the scene takes a few seconds: open the chat now
+    $("#chat-title").textContent = "Practice";
+    $("#chat-sub").textContent = "";
+    $("#messages").innerHTML = `<div class="scene-card loading">${icon("loader", "spin")}
+      Designing a scene around words and grammar you know but rarely say…</div>`;
+    show("chat");
+  }
+  let res;
+  try { res = await api.post("/api/sessions", { mode, ...opts }); }
+  catch (e) { $("#messages").innerHTML = `<div class="scene-card">⚠️ ${esc(e.message)}</div>`; return; }
+  state.session = { ...res, mode: res.mode || mode };
+  const scen = res.scenario;
+  $("#chat-title").textContent = scen ? `${scen.title}` : "Free Chat 💬";
+  $("#chat-sub").textContent = scen ? (scen.setting || scen.description || "") : "Talk about anything!";
+  const grammar = res.grammar_targets || [];
+  $("#messages").innerHTML = scen && scen.intro ? sceneCard(scen, grammar)
+    : grammar.length ? `<div class="scene-card">${grammarTargetsHTML(grammar)}</div>` : "";
   show("chat");
   sendChat("");   // AI opens the conversation
+}
+
+/* practice scenes open with the situation in English: what's going on and what
+   you want to get across — never the Japanese, which is the practice */
+function sceneCard(scen, grammar) {
+  return `<div class="scene-card">
+    <div class="scene-head">${icon("target")} ${esc(scen.title)}</div>
+    <p>${esc(scen.intro)}</p>
+    <div class="scene-roles"><span><b>You:</b> ${esc(scen.user_role)}</span>
+      <span><b>Them:</b> ${esc(scen.ai_role)}</span></div>
+    ${grammarTargetsHTML(grammar)}
+  </div>`;
+}
+
+/* the grammar this session will steer toward, so you know what to reach for */
+function grammarTargetsHTML(grammar) {
+  if (!grammar || !grammar.length) return "";
+  return `<div class="scene-grammar"><div class="scene-sub">${icon("target")} Grammar to practice</div>` +
+    grammar.map(g => `<div class="g-target"><b>${esc(g.label)}</b> — ${esc(g.meaning)}
+      ${g.example ? `<div class="g-ex">${esc(g.example)}</div>` : ""}</div>`).join("") + `</div>`;
 }
 
 $("#chat-back").addEventListener("click", () => show("home"));
@@ -254,7 +286,6 @@ async function streamChat(text, h, extra = {}) {
 async function sendChat(text, extra = {}) {   // extra: {channel: "text"|"voice", hint: bool}
   if (state.busy || !state.session) return;
   state.busy = true;
-  if (voice.on) { voice.listening = false; voiceStatus("thinking", "Thinking…"); }
   $("#hints").classList.add("hidden");
 
   let userDiv = null;
@@ -284,8 +315,6 @@ async function sendChat(text, extra = {}) {   // extra: {channel: "text"|"voice"
     bubble.textContent = "⚠️ " + e.message;
   }
   state.busy = false;
-  // voice mode: if there's nothing to speak (error, or speech failed instantly), listen again
-  if (voice.on && !voice.playing && !voice.queue.length) startListening();
   scrollDown();
 }
 
@@ -308,8 +337,7 @@ function finishAiMessage(aiDiv, ev, raw) {
   $$(".tok", bubble).forEach(tok =>
     tok.addEventListener("click", e => wordPopup(e, tok.dataset.w, raw)));
 
-  if (voice.on) speakReply(raw);
-  else if (state.settings.auto_play !== false) playTTS(raw, 1.0);
+  if (state.settings.auto_play !== false) playTTS(raw, 1.0);
   if (state.settings.auto_translate) translateMsg(ev.message_id, aiDiv);
 }
 
@@ -381,10 +409,14 @@ $("#chat-input").addEventListener("keydown", e => {
   if (e.key === "Tab" && imeCands.length) { e.preventDefault(); acceptKanji(imeCands[0]); return; }
   if (e.key === "Enter") submitInput();
 });
-function submitInput(convert = state.kanaInput, channel = "text") {
+function submitInput() {
   const inp = $("#chat-input");
   let t = inp.value.trim();
-  if (convert) t = wanakana.toKana(t);   // finish a trailing "n" → ん
+  // dictated and sent as-is counts as spoken; once edited, it's typed
+  const spoken = !!dict.text && t === dict.text.trim();
+  const channel = spoken ? "voice" : "text";
+  dict.text = "";
+  if (state.kanaInput && !spoken) t = wanakana.toKana(t);   // finish a trailing "n" → ん
   if (!t || state.busy) return;
   inp.value = "";
   updateKanjiBar();
@@ -454,7 +486,7 @@ $("#kanji-bar").addEventListener("click", e => {
 $("#end-session").addEventListener("click", showSessionSummary);
 async function showSessionSummary() {
   if (!state.session) return;
-  stopVoice();
+  if (dict.listening) cancelDictation();
   const inner = $("#summary-inner");
   inner.innerHTML = `<h2>${icon("clipboard-list")} Session Report</h2><p class='sub'>Kaiwa is writing your report…</p>`;
   $("#summary-modal").classList.remove("hidden");
@@ -505,39 +537,144 @@ $("#word-pop").addEventListener("click", e => {
   if (e.target.id === "word-pop") $("#word-pop").classList.add("hidden");
 });
 
-/* ============================================================= recording */
-let rec = null;
-$("#mic-btn").addEventListener("click", async () => {
-  const btn = $("#mic-btn");
-  if (rec) {                                  // stop & transcribe
-    const { ctx, proc, stream, chunks, rate } = rec;
-    rec = null;
-    btn.classList.remove("recording");
-    proc.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close();
-    const wav = encodeWav(chunks, rate);
-    btn.innerHTML = icon("loader", "spin");
-    try {
-      const fd = new FormData();
-      fd.append("audio", new Blob([wav], { type: "audio/wav" }), "in.wav");
-      if (state.session) fd.append("session_id", state.session.session_id);   // context for recognition
-      const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
-      btn.innerHTML = icon("mic");
-      if (r.text) { $("#chat-input").value = r.text; submitInput(false, "voice"); }  // already Japanese
-    } catch { btn.innerHTML = icon("mic"); }
-    return;
-  }
-  try {                                       // start
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+/* ============================================================= dictation */
+/* Tap the mic and speak. The end of your turn is detected — volume, plus the
+   server's speech model for noisy rooms — or you tap again. What you said goes
+   into the text box to check, fix, and send yourself. */
+const dict = { listening: false, busy: false, mic: null, vad: null, t0: 0, text: "" };
+const VAD_SILENCE_MS = 1000;   // pause that ends your turn (beginners pause to think mid-sentence)
+const VAD_WINDOW_MS = 4000;    // recent audio sent to the server's speech detector
+const VAD_NO_SPEECH_MS = 8000; // give up if nothing is said
+const freshVad = () => ({ started: false, chunks: [], preroll: [], voiced: 0, silence: 0, floor: 0.006,
+                          checking: false, lastCheck: 0 });
+
+$("#mic-btn").addEventListener("click", () => {
+  if (dict.listening) { if (dict.vad.started) finishUtterance(); else cancelDictation(); }
+  else if (!dict.busy) startListening();
+});
+$("#voice-bar").addEventListener("click", () => {   // the status line doubles as "I'm done"
+  if (dict.listening && dict.vad.started) finishUtterance();
+});
+
+function micStatus(cls, text) {
+  const bar = $("#voice-bar");
+  bar.className = "voice-bar" + (cls ? " " + cls : "") + (text ? "" : " hidden");
+  $("#voice-status").textContent = text || "";
+  $("#mic-btn").classList.toggle("recording", dict.listening);
+}
+
+async function ensureMic() {
+  if (dict.mic) return true;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
     const ctx = new AudioContext();
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
-    const chunks = [];
-    proc.onaudioprocess = ev => chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+    proc.onaudioprocess = ev => vadProcess(new Float32Array(ev.inputBuffer.getChannelData(0)));
     src.connect(proc); proc.connect(ctx.destination);
-    rec = { ctx, proc, stream, chunks, rate: ctx.sampleRate };
-    btn.classList.add("recording"); btn.innerHTML = icon("square");
-  } catch { alert("Microphone access denied."); }
-});
+    dict.mic = { stream, ctx, proc, rate: ctx.sampleRate };
+    return true;
+  } catch { return false; }
+}
+
+function releaseMic() {                       // the mic is only open while you're dictating
+  if (!dict.mic) return;
+  try {
+    dict.mic.proc.disconnect();
+    dict.mic.stream.getTracks().forEach(t => t.stop());
+    dict.mic.ctx.close();
+  } catch { /* already closed */ }
+  dict.mic = null;
+}
+
+async function startListening() {
+  if (!(await ensureMic())) { micStatus("", "Microphone blocked — check your browser's permissions"); return; }
+  if (dict.mic.ctx.state === "suspended") dict.mic.ctx.resume();
+  dict.vad = freshVad();
+  dict.t0 = performance.now();
+  dict.listening = true;
+  micStatus("listening", "Listening… speak, then pause (or tap the mic)");
+}
+
+function cancelDictation(message = "") {
+  dict.listening = false;
+  releaseMic();
+  micStatus("", message);
+}
+
+function vadProcess(buf) {
+  if (!dict.listening) return;
+  const v = dict.vad, ms = (buf.length / dict.mic.rate) * 1000;
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+  const rms = Math.sqrt(sum / buf.length);
+  if (!v.started) {
+    if (performance.now() - dict.t0 > VAD_NO_SPEECH_MS) { cancelDictation("Didn't hear anything — tap the mic to try again"); return; }
+    v.floor = Math.min(0.02, v.floor * 0.95 + rms * 0.05);   // adapt to room noise
+    v.preroll.push(buf);
+    if (v.preroll.length > 8) v.preroll.shift();              // keep ~0.7s pre-roll
+    v.voiced = rms > Math.max(v.floor * 3, 0.012) ? v.voiced + ms : 0;
+    if (v.voiced >= 180) {
+      v.started = true;
+      v.chunks = v.preroll.splice(0);
+      micStatus("listening live", "Listening… pause when you're done (or tap here)");
+    }
+  } else {
+    v.chunks.push(buf);
+    // a quiet room still ends the turn by volume alone…
+    v.silence = rms < Math.max(v.floor * 2.5, 0.01) ? v.silence + ms : 0;
+    if (v.silence >= VAD_SILENCE_MS || v.chunks.length * ms > 30000) { finishUtterance(); return; }
+    // …but background noise (lifted by the browser's auto-gain) can keep the
+    // volume up after you stop, so a speech model on the server decides too
+    const now = performance.now();
+    if (!v.checking && now - v.lastCheck > 300) checkSpeechEnd(v, ms);
+  }
+}
+
+async function checkSpeechEnd(v, ms) {
+  v.checking = true;
+  v.lastCheck = performance.now();
+  const recent = v.chunks.slice(-Math.ceil(VAD_WINDOW_MS / ms));
+  try {
+    const fd = new FormData();
+    fd.append("audio", new Blob([encodeWav(recent, dict.mic.rate)], { type: "audio/wav" }), "recent.wav");
+    const r = await fetch("/api/vad", { method: "POST", body: fd }).then(r => r.json());
+    if (dict.vad !== v || !dict.listening) return;      // turn already over
+    const quiet = r.last_speech_end == null
+      ? (v.chunks.length * ms >= VAD_WINDOW_MS ? r.duration : 0)   // no speech in the whole window
+      : r.duration - r.last_speech_end;
+    if (quiet * 1000 >= VAD_SILENCE_MS) finishUtterance();
+  } catch { /* server check unavailable: the volume rule still applies */ }
+  finally { v.checking = false; }
+}
+
+async function finishUtterance() {
+  const v = dict.vad, rate = dict.mic.rate;
+  dict.listening = false;
+  releaseMic();
+  if (v.chunks.length * (4096 / rate) * 1000 < 400) { micStatus("", ""); return; }
+  dict.busy = true;
+  micStatus("thinking", "Transcribing…");
+  let text = "";
+  try {
+    const fd = new FormData();
+    fd.append("audio", new Blob([encodeWav(v.chunks, rate)], { type: "audio/wav" }), "in.wav");
+    if (state.session) fd.append("session_id", state.session.session_id);   // context for recognition
+    const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
+    text = (r.text || "").trim();
+  } catch { /* reported below */ }
+  dict.busy = false;
+  if (!text) { micStatus("", "Didn't catch that — tap the mic to try again"); return; }
+  micStatus("", "");
+  const inp = $("#chat-input");
+  inp.value = inp.value.trim() + text;     // added to anything already typed
+  dict.text = inp.value;                   // sent unchanged → counts as spoken
+  inp.focus();
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+  updateKanjiBar();
+}
 
 function encodeWav(chunks, inRate) {
   let len = chunks.reduce((a, c) => a + c.length, 0);
@@ -562,214 +699,6 @@ function encodeWav(chunks, inRate) {
   ws(36, "data"); dv.setUint32(40, pcm.length * 2, true);
   new Int16Array(buf, 44).set(pcm);
   return buf;
-}
-
-/* ============================================================ voice mode */
-/* Hands-free voice inside the chat. The mic listens; the end of your turn is
-   detected (volume, plus the server's speech model for noisy rooms); what you
-   said is sent as a normal chat message (bubble, corrections, tracking); the
-   reply is spoken a sentence at a time, then listening resumes. */
-const voice = {
-  on: false, listening: false, mic: null, vad: null,
-  queue: [], playing: false, audio: null,
-};
-const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQQAAAAAAA==";
-
-$("#voice-btn").addEventListener("click", () => (voice.on ? stopVoice() : startVoice()));
-$("#voice-bar").addEventListener("click", () => {
-  // while you're talking a tap means "I'm done"; while the partner speaks it interrupts
-  if (voice.listening && voice.vad && voice.vad.started) finishUtterance();
-  else if (voice.playing || voice.queue.length) interruptSpeech();
-});
-
-async function startVoice() {
-  if (!voice.audio) voice.audio = new Audio();
-  voice.audio.src = SILENT_WAV;                 // unlock audio inside the tap (iOS)
-  voice.audio.play().catch(() => {});
-  if (!(await ensureMic())) { alert("Microphone access was blocked — check your browser's permissions."); return; }
-  voice.on = true;
-  $("#voice-btn").classList.add("on");
-  $("#mic-btn").classList.add("hidden");        // one mic at a time
-  $("#voice-bar").classList.remove("hidden");
-  if (state.busy) voiceStatus("thinking", "Thinking…");   // the pending reply leads into listening
-  else startListening();
-}
-
-function stopVoice() {
-  if (!voice.on && !voice.mic) return;
-  voice.on = false;
-  voice.listening = false;
-  voice.queue = [];
-  voice.playing = false;
-  if (voice.audio) voice.audio.pause();
-  if (voice.mic) {
-    try {
-      voice.mic.proc.disconnect();
-      voice.mic.stream.getTracks().forEach(t => t.stop());
-      voice.mic.ctx.close();
-    } catch { /* already closed */ }
-    voice.mic = null;
-  }
-  $("#voice-btn").classList.remove("on");
-  $("#mic-btn").classList.remove("hidden");
-  $("#voice-bar").classList.add("hidden");
-}
-
-function voiceStatus(cls, text) {
-  $("#voice-bar").className = "voice-bar" + (cls ? " " + cls : "");
-  $("#voice-status").textContent = text;
-}
-
-/* --- speaking: the reply, a sentence at a time (the next one synthesizes while this one plays) --- */
-function speakReply(text) {
-  splitSentences(text + "\n")[0].forEach(enqueueSpeech);
-  pumpSpeech();
-}
-
-function splitSentences(text) {
-  const out = [];
-  let cur = "";
-  for (const ch of text) {
-    cur += ch;
-    if ("。！？!?\n".includes(ch)) {
-      const t = cur.trim();
-      if (t && /[^。！？!?\s]/.test(t)) out.push(t);
-      cur = "";
-    }
-  }
-  return [out, cur];
-}
-
-function enqueueSpeech(text) {
-  const speed = state.settings.speed || 1.0;
-  const v = encodeURIComponent(state.settings.voice || "");
-  const url = `/api/tts?text=${encodeURIComponent(text)}&speed=${speed}&voice=${v}`;
-  voice.queue.push({ text, blob: fetch(url).then(r => r.ok ? r.blob() : null).catch(() => null) });
-}
-
-async function pumpSpeech() {
-  if (!voice.on || voice.playing) return;
-  const item = voice.queue.shift();
-  if (!item) {                                   // reply finished → your turn
-    if (!voice.listening && !state.busy) startListening();
-    return;
-  }
-  voice.playing = true;
-  voiceStatus("speaking", "Speaking… tap here to interrupt");
-  const blob = await item.blob;
-  if (!voice.on || !voice.playing) return;       // interrupted while synthesizing
-  if (!blob) { voice.playing = false; pumpSpeech(); return; }
-  const src = URL.createObjectURL(blob);
-  const next = () => { URL.revokeObjectURL(src); voice.playing = false; pumpSpeech(); };
-  voice.audio.src = src;
-  voice.audio.onended = next;
-  voice.audio.onerror = next;
-  voice.audio.play().catch(next);
-}
-
-function interruptSpeech() {
-  voice.queue = [];
-  voice.playing = false;
-  voice.audio.pause();
-  startListening();
-}
-
-/* --- listening: volume starts a turn; volume or the server's speech model ends it --- */
-async function ensureMic() {
-  if (voice.mic) return true;
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
-    const ctx = new AudioContext();
-    const src = ctx.createMediaStreamSource(stream);
-    const proc = ctx.createScriptProcessor(4096, 1, 1);
-    proc.onaudioprocess = ev => vadProcess(new Float32Array(ev.inputBuffer.getChannelData(0)));
-    src.connect(proc); proc.connect(ctx.destination);
-    voice.mic = { stream, ctx, proc, rate: ctx.sampleRate };
-    return true;
-  } catch { return false; }
-}
-
-const freshVad = () => ({ started: false, chunks: [], preroll: [], voiced: 0, silence: 0, floor: 0.006,
-                          checking: false, lastCheck: 0 });
-const VAD_SILENCE_MS = 1000;   // pause that ends your turn (beginners pause to think mid-sentence)
-const VAD_WINDOW_MS = 4000;    // recent audio sent to the server's speech detector
-
-async function startListening(afterError) {
-  if (!voice.on || voice.listening) return;
-  if (!(await ensureMic())) { voiceStatus("", "Mic blocked — check browser permissions"); return; }
-  if (voice.mic.ctx.state === "suspended") voice.mic.ctx.resume();
-  voice.vad = freshVad();
-  voice.listening = true;
-  if (!afterError) voiceStatus("listening", "Your turn — just speak");
-}
-
-function vadProcess(buf) {
-  if (!voice.on || !voice.listening) return;
-  const v = voice.vad, ms = (buf.length / voice.mic.rate) * 1000;
-  let sum = 0;
-  for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-  const rms = Math.sqrt(sum / buf.length);
-  if (!v.started) {
-    v.floor = Math.min(0.02, v.floor * 0.95 + rms * 0.05);   // adapt to room noise
-    v.preroll.push(buf);
-    if (v.preroll.length > 8) v.preroll.shift();              // keep ~0.7s pre-roll
-    v.voiced = rms > Math.max(v.floor * 3, 0.012) ? v.voiced + ms : 0;
-    if (v.voiced >= 180) {
-      v.started = true;
-      v.chunks = v.preroll.splice(0);
-      voiceStatus("listening live", "Listening… tap here when you're done");
-    }
-  } else {
-    v.chunks.push(buf);
-    // a quiet room still ends the turn by volume alone…
-    v.silence = rms < Math.max(v.floor * 2.5, 0.01) ? v.silence + ms : 0;
-    if (v.silence >= VAD_SILENCE_MS || v.chunks.length * ms > 30000) { finishUtterance(); return; }
-    // …but background noise (lifted by the browser's auto-gain) can keep the
-    // volume up after you stop, so a speech model on the server decides too
-    const now = performance.now();
-    if (!v.checking && now - v.lastCheck > 300) checkSpeechEnd(v, ms);
-  }
-}
-
-async function checkSpeechEnd(v, ms) {
-  v.checking = true;
-  v.lastCheck = performance.now();
-  const recent = v.chunks.slice(-Math.ceil(VAD_WINDOW_MS / ms));
-  try {
-    const fd = new FormData();
-    fd.append("audio", new Blob([encodeWav(recent, voice.mic.rate)], { type: "audio/wav" }), "recent.wav");
-    const r = await fetch("/api/vad", { method: "POST", body: fd }).then(r => r.json());
-    if (voice.vad !== v || !voice.listening) return;      // turn already over
-    const quiet = r.last_speech_end == null
-      ? (v.chunks.length * ms >= VAD_WINDOW_MS ? r.duration : 0)   // no speech in the whole window
-      : r.duration - r.last_speech_end;
-    if (quiet * 1000 >= VAD_SILENCE_MS) finishUtterance();
-  } catch { /* server check unavailable: the volume rule still applies */ }
-  finally { v.checking = false; }
-}
-
-async function finishUtterance() {
-  const v = voice.vad;
-  voice.listening = false;
-  if (v.chunks.length * (4096 / voice.mic.rate) * 1000 < 400) { startListening(); return; }
-  voiceStatus("thinking", "Got it…");
-  let text = "";
-  try {
-    const fd = new FormData();
-    fd.append("audio", new Blob([encodeWav(v.chunks, voice.mic.rate)], { type: "audio/wav" }), "in.wav");
-    if (state.session) fd.append("session_id", state.session.session_id);   // context for recognition
-    const r = await fetch("/api/stt", { method: "POST", body: fd }).then(r => r.json());
-    text = (r.text || "").trim();
-  } catch { /* fall through to retry */ }
-  if (!voice.on) return;
-  if (!text) {
-    startListening(true);
-    voiceStatus("listening", "Didn't catch that — try again");
-    return;
-  }
-  await sendChat(text, { channel: "voice" });   // your bubble + correction; the reply speaks itself
 }
 
 /* ============================================================== progress */

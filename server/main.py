@@ -19,7 +19,7 @@ from .learner import service as learner
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
-MODES = ("free_chat", "roleplay")   # voice is a mode of any chat, not a session type
+MODES = ("free_chat", "roleplay", "practice")   # voice is a mode of any chat, not a session type
 
 app = FastAPI(title="Kaiwa")
 db.init()
@@ -147,8 +147,7 @@ def get_scenarios():
 # ----------------------------------------------------------------- sessions
 
 @app.post("/api/sessions")
-async def create_session(req: Request):
-    body = await req.json()
+def create_session(body: dict = Body(...)):   # sync: practice scenes call Claude
     mode = body.get("mode", "free_chat")
     if mode not in MODES:
         return JSONResponse({"error": f"unknown mode: {mode}"}, status_code=400)
@@ -167,8 +166,24 @@ async def create_session(req: Request):
             }
             sid_key = "custom"
     targets = learner.choose_targets(db.observation_events()) if learner.profile() else []
+    if mode == "practice" and targets:
+        # a scene built around the targets, so they're the natural thing to say
+        s = settings()
+        try:
+            scen, targets = learner.design_scene(targets, llm.client(s), llm.model(s))
+            sid_key = "practice"
+        except Exception:
+            mode = "free_chat"   # still a conversation with the same targets
+    elif mode == "practice":
+        mode = "free_chat"       # no profile yet → nothing to target
     session_id = db.create_session(mode, sid_key, scen, targets)
-    return {"session_id": session_id, "scenario": scen}
+    # grammar targets are shown up front so the learner knows what to reach for;
+    # word targets stay hidden (recalling them from the English is the practice)
+    grammar_targets = [{"label": t["label"], "meaning": t["meaning"],
+                        "example": learner.show(t.get("example", ""))}
+                       for t in targets if t["kind"] == "grammar"]
+    return {"session_id": session_id, "scenario": scen, "mode": mode,
+            "grammar_targets": grammar_targets}
 
 
 @app.get("/api/sessions/{sid}/messages")
@@ -479,7 +494,7 @@ def api_stt(audio: UploadFile = File(...), session_id: int | None = Form(None)):
 
 @app.post("/api/vad")
 def api_vad(audio: UploadFile = File(...)):
-    """End-of-turn detection for voice mode: where speech stops in the last few seconds."""
+    """End-of-turn detection for dictation: where speech stops in the last few seconds."""
     return stt.speech_end(audio.file.read())
 
 

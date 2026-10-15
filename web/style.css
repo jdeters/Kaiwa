@@ -311,8 +311,26 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .new-word-row { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 10px; padding: 9px 12px; margin-bottom: 8px; font-size: .92rem; }
 .new-word-row .w { font-weight: 800; } .new-word-row .m { color: var(--sub); flex: 1; }
 
-/* ---------------------------------------------------------- voice mode */
-.icon-btn.voice-btn.on { background: var(--green); color: #fff; }
+/* ------------------------------------------------------- practice scenes */
+.mode-card.practice { background: linear-gradient(135deg, #fdf3e3, #fff); }
+.mode-card.practice .mode-icon { color: var(--amber); }
+.mode-card.practice:hover { border-color: var(--amber); }
+.scene-card {
+  background: var(--panel); border: 2px solid var(--amber-soft); border-radius: var(--radius);
+  padding: 16px 18px; margin: 4px 0 16px; box-shadow: var(--shadow); line-height: 1.6;
+}
+.scene-card.loading { color: var(--sub); }
+.scene-head { font-weight: 800; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.scene-head .icon { color: var(--amber); }
+.scene-roles { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: .85rem; color: var(--sub); margin-top: 8px; }
+.scene-grammar { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.scene-card > .scene-grammar:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.scene-sub { font-weight: 800; font-size: .85rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.scene-sub .icon { color: var(--amber); }
+.g-target { font-size: .92rem; margin: 4px 0; }
+.g-ex { color: var(--sub); font-size: 1rem; margin: 2px 0 0 2px; }
+
+/* ---------------------------------------------------------- dictation status */
 .voice-bar {
   display: flex; align-items: center; gap: 8px; cursor: pointer;
   max-width: 812px; margin: 6px auto 0; width: calc(100% - 48px);
@@ -324,7 +342,6 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .voice-bar.listening.live { background: var(--green); color: #fff; }
 .voice-bar.listening.live .icon { animation: breathe 1s ease-in-out infinite; }
 .voice-bar.thinking .icon { animation: breathe 1.6s ease-in-out infinite; }
-.voice-bar.speaking { color: var(--indigo); }
 @keyframes breathe { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 
 /* ------------------------------------------------- session reports */
@@ -406,6 +423,6 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
   .composer { padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); gap: 7px; }
   .kanji-bar { padding: 0 12px; }
   .voice-bar { width: calc(100% - 24px); }
-  .composer .icon-btn.big { width: 40px; height: 40px; font-size: 1.05rem; }   /* 5 buttons + input */
+  .composer .icon-btn.big { width: 40px; height: 40px; font-size: 1.05rem; }   /* 4 buttons + input */
   .resume-pill { bottom: calc(70px + env(safe-area-inset-bottom)); }  /* above the tab bar */
 }
