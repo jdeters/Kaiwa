@@ -258,10 +258,19 @@ def _correct_message(msg: dict) -> dict:
         current = db.get_message(msg["id"])
         if current and current.get("correction"):
             return current["correction"]
+        spoken = (msg.get("meta") or {}).get("channel") == "voice"
         result = llm.chat_json(
-            prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"]), settings())
+            prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"],
+                                             spoken=prompts.SPOKEN_NOTE if spoken else ""), settings())
         result.setdefault("has_errors", False)
         result.setdefault("errors", [])
+        misheard = [m for m in result.pop("misheard", None) or [] if m.get("heard")] if spoken else []
+        particles = result.pop("particles", None) or []        # internal: に/で/と/から/の uses
+        if spoken:   # nothing was spelled: spelling "errors" are the transcription's, not the learner's
+            result["errors"] = [e for e in result["errors"] if e.get("category") != "spelling"]
+            result["has_errors"] = bool(result["errors"])
+        result["misheard"] = [{"heard": m["heard"], "probably": learner.show(m.get("probably", ""))}
+                              for m in misheard]
         # corrected Japanese follows the same kanji rule as everything else
         result["corrected"] = learner.show(result.get("corrected", ""))
         for e in result["errors"]:
@@ -273,7 +282,8 @@ def _correct_message(msg: dict) -> dict:
         if result.get("has_errors"):
             for e in result["errors"][:3]:
                 db.add_mistake(msg["session_id"], e)
-        _record_production(msg, normalized, result["errors"])
+        _record_production(msg, normalized, result["errors"], particles,
+                           [m.get("probably", "") for m in misheard])
         return result
 
 
@@ -285,14 +295,15 @@ def correct(body: dict = Body(...)):
     return _correct_message(msg)
 
 
-def _record_production(msg: dict, normalized: str, errors: list):
+def _record_production(msg: dict, normalized: str, errors: list, particles=(), uncertain=()):
     """Track which known words and grammar the learner produced in this message."""
     if learner.profile() is None:
         return
     meta = msg.get("meta") or {}
     earlier = [m for m in db.get_messages(msg["session_id"]) if m["id"] < msg["id"]]
     prev_partner = next((m["text"] for m in reversed(earlier) if m["role"] == "assistant"), "")
-    obs = learner.observe(normalized, prev_partner, errors, hint=bool(meta.get("hint")))
+    obs = learner.observe(normalized, prev_partner, errors, hint=bool(meta.get("hint")),
+                          particles=particles, uncertain=uncertain)
     db.set_observations(msg["id"], msg["session_id"], meta.get("channel", "text"), obs)
 
 

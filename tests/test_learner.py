@@ -233,3 +233,38 @@ def test_partner_may_not_say_unproduced_word_targets(profile):
     assert not p._target_violations("昨日、何を見ましたか。")       # asks for it: fine
     assert p._salvage([{"japanese": "そうですか。映画は好きですか。"},
                        {"japanese": "昨日、何を見ましたか。"}]) == "そうですか。昨日、何を見ましたか。"
+
+
+def test_onegaishimasu_is_grammar_not_the_word_negau(profile):
+    o = _obs(profile, "コーヒーをお願いします。")
+    assert o[("grammar", "request.onegaishimasu")] == "independent"
+    assert ("word", "願う") not in o
+
+
+def test_particles_resolved_by_labeled_use(profile):
+    o = _obs(profile, "友達と家で映画を見ました。",
+             particles=[{"particle": "と", "use": "to.with"}, {"particle": "で", "use": "de.location"}])
+    assert o[("grammar", "particle.to.with")] == "independent"
+    assert o[("grammar", "particle.de.location")] == "independent"
+    o = _obs(profile, "友達と家で映画を見ました。")        # unlabeled: still not guessed
+    assert ("grammar", "particle.de.location") not in o
+
+
+def test_possibly_misheard_words_are_left_out(profile):
+    # the corrector flagged a garbled word whose best guess is えいが: it isn't counted
+    o = _obs(profile, "昨日、映画を見ました。", uncertain=["えいが"])
+    assert ("word", "映画") not in o and ("word", "見る") in o
+
+
+def test_grammar_inside_a_misheard_stretch_is_left_out(profile):
+    o = _obs(profile, "九時に行きました。", uncertain=["九時に行きました"],   # as in the sentence
+             particles=[{"particle": "に", "use": "ni.time"}])
+    assert ("grammar", "particle.ni.time") not in o and ("grammar", "verb.mashita") not in o
+
+
+def test_misheard_exclusion_is_positional(profile):
+    # only the guessed stretch is left out; the に in 家に was heard fine
+    o = _obs(profile, "家に帰りました。映画に行きました。", uncertain=["えいがに"],
+             particles=[{"particle": "に", "use": "ni.destination"}, {"particle": "に", "use": "ni.destination"}])
+    assert o.get(("grammar", "particle.ni.destination")) == "independent"
+    assert ("word", "映画") not in o and o[("word", "家")] == "independent"

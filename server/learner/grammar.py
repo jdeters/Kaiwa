@@ -150,7 +150,9 @@ def detect(toks: list) -> list:
                     and nxt and nxt.lemma == "為る"):
                 opts = ("request.onegaishimasu",) if t.lemma == "願う" else ()
                 form = _verb_form(toks, i + 1)
-                add(Hit(opts, f"お{t.surface}します", i - 1, form.j, [i - 1, i + 1] + form.function))
+                # お願いします is one learned phrase: 願い is grammar here, not the word 願う
+                core = [i - 1, i, i + 1] if opts else [i - 1, i + 1]
+                add(Hit(opts, f"お{t.surface}します", i - 1, form.j, core + form.function))
                 continue
             if t.lemma in ("有る", "居る"):
                 add(Hit(("existence.arimasu_imasu",), "あります／います", i, i + 1))

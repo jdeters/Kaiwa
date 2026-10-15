@@ -295,8 +295,9 @@ def ime_table() -> dict:
     return _cache["ime"]
 
 
-def observe(normalized: str, prev_partner: str, errors: list, hint: bool) -> list:
-    return production.observe(normalized, profile(), prev_partner, errors, hint)
+def observe(normalized: str, prev_partner: str, errors: list, hint: bool,
+            particles=(), uncertain=()) -> list:
+    return production.observe(normalized, profile(), prev_partner, errors, hint, particles, uncertain)
 
 
 def word_label(word_id: str) -> str:

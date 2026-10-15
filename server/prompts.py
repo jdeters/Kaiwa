@@ -7,7 +7,7 @@ Analyze the student's Japanese message from a conversation.
 
 The student is {learner}.
 Student's message: {text}
-
+{spoken}
 Return ONLY JSON with this exact shape:
 {{
   "has_errors": true/false,
@@ -16,8 +16,17 @@ Return ONLY JSON with this exact shape:
     {{"wrong": "the incorrect fragment", "right": "the corrected fragment", "explanation": "ONE short English sentence explaining why", "category": "particle|verb form|word choice|word order|politeness|spelling|other"}}
   ],
   "praise": "ONE short encouraging English sentence about what they did well",
-  "normalized": "the student's message exactly as they meant it — the same words, the same mistakes, nothing fixed — but re-spelled in standard Japanese orthography with kanji where normal"
+  "normalized": "the student's message exactly as they meant it — the same words, the same mistakes, nothing fixed — but re-spelled in standard Japanese orthography with kanji where normal",
+  "misheard": [{{"heard": "a garbled fragment as transcribed", "probably": "what the student most likely said, written exactly as it appears in normalized"}}],
+  "particles": [{{"particle": "に", "use": "one use id from the list below"}}]
 }}
+
+"particles": every に, で, と, から and の in the student's message, in order, each with the use it has
+there (even if it's the wrong particle for the sentence). Use ids:
+  ni.destination (going/coming to a place), ni.time (at a specific time), ni.target (to/with a person or
+  thing: 友達に会う, 母に電話する), de.location (where an action happens), de.means (by a means/transport),
+  to.and (A and B), to.with (together with someone), kara.origin (from a place), kara.time (from a time),
+  no.possession (someone's), no.affiliation (company/school + person), no.modifier (other noun + noun)
 
 Rules:
 - Only flag real errors, not stylistic preferences.
@@ -35,6 +44,16 @@ Write any Japanese you quote inside English text in hiragana/katakana only (the 
 TRANSLATE_PROMPT = """Translate this Japanese text to natural English. Return ONLY JSON: {{"translation": "..."}}
 
 Japanese: {text}"""
+
+SPOKEN_NOTE = """
+This message was SPOKEN: speech recognition turned it into text, and makes its own mistakes.
+- Never report spelling, script (kana/katakana/kanji), long-vowel marks or punctuation — the student
+  didn't write anything.
+- If a word looks garbled or out of place, as if misheard (it sounds like a word that would fit), list it
+  under "misheard" with your best guess instead of under "errors", and use the best guess in "normalized".
+- Report only errors the student most likely made when speaking: particles, verb forms, word choice,
+  word order, politeness.
+"""
 
 HINT_PROMPT = """You are helping a Japanese learner who is stuck in a conversation.
 The learner is {learner}.

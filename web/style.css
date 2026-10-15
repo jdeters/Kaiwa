@@ -248,6 +248,8 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .speak-table td.ja { white-space: normal; }
 .speak-table tr.unused td { color: var(--sub); }
 .word-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.misheard { color: var(--sub); font-size: .85rem; margin-top: 4px; }
+.misheard .icon { width: 14px; height: 14px; vertical-align: -2px; }
 .targets { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .target { display: flex; align-items: baseline; gap: 10px; background: var(--bg); border-radius: 10px; padding: 8px 12px; }
 .target .mark { width: 1em; font-weight: 800; color: var(--sub); }

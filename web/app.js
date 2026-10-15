@@ -378,6 +378,10 @@ async function queueCorrection(mid, userDiv) {
         ).join("") +
         (c.praise ? `<div class="praise">${icon("trophy")} ${esc(c.praise)}</div>` : "");
     }
+    // spoken messages: words speech recognition may have gotten wrong (not counted as mistakes)
+    if ((c.misheard || []).length) div.innerHTML += c.misheard.map(m =>
+      `<div class="misheard">${icon("mic")} Possibly misheard: <span class="wrong">${esc(m.heard)}</span>` +
+      (m.probably ? ` — did you say <span class="right">${esc(m.probably)}</span>?` : "") + `</div>`).join("");
     userDiv.appendChild(div);
     scrollDown();
   } catch { /* silent */ }
