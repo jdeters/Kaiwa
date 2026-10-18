@@ -113,7 +113,11 @@ def scenario_for(session: dict, kaiwa_profile: dict) -> dict:
 
 # ---------------------------------------------------------------- practice
 
-N_GRAMMAR_TARGETS, N_WORD_TARGETS = 2, 4
+# A session is ~10 minutes: a few targets fit a comfortable conversation, more
+# turn it into a checklist. Practice scenes get a bigger pool to choose from.
+N_GRAMMAR_TARGETS, N_WORD_TARGETS = 1, 2
+POOL_GRAMMAR, POOL_WORDS = 2, 4
+MAX_TARGETS = 3
 
 
 def _word_meaning(word_id: str) -> str:
@@ -123,7 +127,8 @@ def _word_meaning(word_id: str) -> str:
     return ""
 
 
-def choose_targets(events: list, rng: random.Random | None = None) -> list:
+def choose_targets(events: list, rng: random.Random | None = None,
+                   n_grammar: int = N_GRAMMAR_TARGETS, n_words: int = N_WORD_TARGETS) -> list:
     """Practice targets for a new conversation: a few grammar points and words,
     picked by practice.pick from the learner's observation history."""
     p = profile()
@@ -141,8 +146,8 @@ def choose_targets(events: list, rng: random.Random | None = None) -> list:
     states = practice.replay(events)
     now = time.time()
     rng = rng or random.Random()
-    picked = (practice.pick(gram, states, now, N_GRAMMAR_TARGETS, rng)
-              + practice.pick(words, states, now, N_WORD_TARGETS, rng))
+    picked = (practice.pick(gram, states, now, n_grammar, rng)
+              + practice.pick(words, states, now, n_words, rng))
     out = []
     for (kind, item), reason in picked:
         if kind == "grammar":
@@ -164,9 +169,10 @@ SCENE_SCHEMA = {
         "user_role": {"type": "string"},
         "goal": {"type": "string"},
         "intro": {"type": "string"},
+        "key_words": {"type": "array", "items": {"type": "string"}},
         "targets": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["title", "setting", "ai_role", "user_role", "goal", "intro", "targets"],
+    "required": ["title", "setting", "ai_role", "user_role", "goal", "intro", "key_words", "targets"],
     "additionalProperties": False,
 }
 
@@ -188,10 +194,20 @@ SCENE_SETTINGS = [
 ]
 
 
+def trim_targets(targets: list) -> list:
+    """A candidate pool cut to a session's worth, keeping grammar and words mixed."""
+    gram = [t for t in targets if t["kind"] == "grammar"][:N_GRAMMAR_TARGETS]
+    words = [t for t in targets if t["kind"] != "grammar"]
+    return gram + words[:MAX_TARGETS - len(gram)]
+
+
 def design_scene(targets: list, client, model: str, recent: list = (),
-                 rng: random.Random | None = None) -> tuple:
-    """A short roleplay built so that 3–4 of the targets come up naturally.
+                 rng: random.Random | None = None, max_attempts: int = 3) -> tuple:
+    """A short roleplay (~10 minutes) built so that 2–3 of the targets come up naturally.
     recent: titles/settings of the learner's last practice scenes, not to repeat.
+    The designer sees the learner's vocabulary (the partner's cached system prompt)
+    and names the scene's key words; a scene whose key words the learner doesn't
+    know (cold medicine without 薬) is sent back for a redesign.
     Returns (scenario dict for the session, the targets it uses)."""
     rng = rng or random.Random()
     ideas = "\n".join(f"- {s}" for s in rng.sample(SCENE_SETTINGS, 5))
@@ -200,15 +216,21 @@ def design_scene(targets: list, client, model: str, recent: list = (),
     listed = "\n".join(
         f"- {t['item']}: {t['label']} — {t['meaning']}" + (f" (e.g. {t['example']})" if t.get("example") else "")
         for t in targets)
-    prompt = f"""Design a short everyday roleplay for a Japanese learner: {describe()}.
+    prompt = f"""Instead of replying in a conversation, design a short everyday roleplay for this
+learner: {describe()}. The vocabulary and grammar above are everything they know.
 
 These are things the learner has studied but rarely says (id: what it is):
 {listed}
 
-Pick 3–4 of them that could all come up naturally in ONE plausible, simple everyday situation
-(include at least one grammar item if any fits), and design that situation so the learner
-will need to say them. The partner (a Japanese speaker) starts the conversation; the learner
+Pick 2 or 3 of them (no more) that could all come up naturally in ONE plausible, simple
+everyday situation (include at least one grammar item if any fits), and design that situation
+so the learner will need to say them. It should make a relaxed conversation of about 10
+minutes: one clear purpose, with room for small talk around it — not a checklist. The partner (a Japanese speaker) starts the conversation; the learner
 replies using only beginner Japanese.
+
+The whole scene must be talkable with the vocabulary above: the place, the things and people
+involved, and what each side wants. If the learner doesn't know the word for something (e.g.
+medicine, a ticket, a haircut), don't build the scene around it — choose a different situation.
 
 Set it in one of these places (pick the one that fits the targets best), or somewhere equally
 different from a restaurant or café:
@@ -220,26 +242,47 @@ Return JSON:
 - setting: one sentence, where and when
 - ai_role: who the partner plays
 - user_role: who the learner plays
-- goal: what the learner needs to get across (for the partner; may name the targets)
-- intro: 2–3 sentences of ENGLISH, addressed to the learner as "you", setting the scene and
-  saying what they want to tell or ask. Describe it in English only — never give the Japanese
+- goal: what the learner needs to get across (for the partner; may name the targets). It must
+  agree with the intro: only what the intro tells the learner to say or ask, no other plans.
+- intro: 2–3 short sentences of ENGLISH, addressed to the learner as "you", setting the scene
+  and saying what they want to tell or ask. Describe it in English only — never give the Japanese
   words; working them out is the practice.
+- key_words: the Japanese words (dictionary form, from the vocabulary above) for the place,
+  things and actions the conversation is about, e.g. ["本屋", "本", "買う"]
 - targets: the ids you chose, exactly as listed"""
-    resp = generate.create_message(
-        client, model, max_tokens=4000,
-        output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCENE_SCHEMA}},
-        messages=[{"role": "user", "content": prompt}])
-    scene = json.loads(next(b.text for b in resp.content if b.type == "text"))
+    p = profile()
+    system = [{"type": "text", "text": generate.partner_system_prompt(p, _cache["concepts"]),
+               "cache_control": {"type": "ephemeral"}}]
+    messages = [{"role": "user", "content": prompt}]
+    best = None
+    for _ in range(max_attempts):
+        resp = generate.create_message(
+            client, model, max_tokens=4000, system=system, messages=messages,
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCENE_SCHEMA}})
+        text = next(b.text for b in resp.content if b.type == "text")
+        scene = json.loads(text)
+        unknown = [w for w in scene.get("key_words") or []
+                   if any(v.kind == "vocab" for v in check(w).violations)]
+        if best is None or len(unknown) < len(best[1]):
+            best = (scene, unknown)
+        if not unknown:
+            break
+        messages += [{"role": "assistant", "content": text},
+                     {"role": "user", "content": "The learner doesn't know these key words: "
+                      + "、".join(unknown) + ". Design a different situation that doesn't need "
+                      "them, with the same JSON fields."}]
+    scene = best[0]
+    scene.pop("key_words", None)
     picked = set(scene.pop("targets", None) or ())
-    chosen = [t for t in targets if t["item"] in picked] or targets   # none named: keep all
+    chosen = [t for t in targets if t["item"] in picked][:MAX_TARGETS] or trim_targets(targets)
     scene.update(id="practice", kind="practice", description=scene["goal"])
     return scene, chosen
 
 
 def _targets_note(targets: list) -> str:
     lines = ["PRACTICE TARGETS — things the learner has studied but rarely says. Over the "
-             "conversation, create natural chances for them to use 2–3 of these that fit "
-             "the scene (skip any that don't fit):"]
+             "conversation (about 10 minutes, so there's no hurry), create natural chances "
+             "for them to use these:"]
     for t in targets:
         if t["kind"] == "grammar":
             lines.append(f"- grammar {t['label']}: {t['meaning']} e.g. {t['example']}")
@@ -248,6 +291,10 @@ def _targets_note(targets: list) -> str:
                          + (f" ({t['meaning']})" if t.get("meaning") else ""))
     lines.append("Ask questions whose natural answer uses a target, one at a time; never mention "
                  "that these are targets.")
+    lines.append("Making sense comes first: every question must fit the scene and what has "
+                 "already been said — never ask something already answered, or something that "
+                 "doesn't fit the situation, just to bring up a target. If a target can't come "
+                 "up naturally, skip it.")
     lines.append("WORD targets: never say the word yourself before the learner does — if you do, "
                  "they just copy it. Ask an open question that makes them reach for it. For 大好き: "
                  "「すしはどうですか。」, not 「すしは大好きですか。」. For 大きい: "
@@ -289,6 +336,8 @@ def reply(session: dict, db_messages: list, kaiwa_profile: dict, client, model: 
         "tokens": tokens(t.japanese, reading),
         "meta": {"model": model, "ok": t.ok, "salvaged": t.salvaged, "seconds": t.seconds,
                  "drafts": len(t.attempts), "reading": reading,
+                 "rejected": [{"japanese": a["japanese"], "violations": a["violations"]}
+                              for a in t.attempts if a["violations"]],
                  "cost": round(partner.usage.cost(model), 5)},
     }
 

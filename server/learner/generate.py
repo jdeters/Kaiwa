@@ -113,7 +113,8 @@ def scenario_prompt(scenario: dict) -> str:
             f"Your role: {scenario['ai_role']}\n"
             f"The learner's role: {scenario['user_role']}\n"
             f"Goal of the conversation: {scenario['goal']}\n"
-            "Stay in the scene and move it toward the goal."
+            "Stay in the scene and move it toward the goal. Keep it consistent with what has "
+            "already been said, and don't ask what the learner already told you."
             + "".join(f"\n{n}" for n in scenario.get("notes", [])))
 
 

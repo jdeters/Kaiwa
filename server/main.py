@@ -165,7 +165,13 @@ def create_session(body: dict = Body(...)):   # sync: practice scenes call Claud
                 "setting": c.get("setting", ""), "kind": "roleplay",
             }
             sid_key = "custom"
-    targets = learner.choose_targets(db.observation_events()) if learner.profile() else []
+    targets = []
+    if learner.profile():
+        pool = mode == "practice"   # a scene picks 2–3 from a bigger pool that fit together
+        targets = learner.choose_targets(
+            db.observation_events(),
+            n_grammar=learner.POOL_GRAMMAR if pool else learner.N_GRAMMAR_TARGETS,
+            n_words=learner.POOL_WORDS if pool else learner.N_WORD_TARGETS)
     if mode == "practice" and targets:
         # a scene built around the targets, so they're the natural thing to say
         s = settings()
@@ -174,7 +180,8 @@ def create_session(body: dict = Body(...)):   # sync: practice scenes call Claud
                                                  recent=db.recent_practice_scenes())
             sid_key = "practice"
         except Exception:
-            mode = "free_chat"   # still a conversation with the same targets
+            mode = "free_chat"   # still a conversation with (a session's worth of) the targets
+            targets = learner.trim_targets(targets)
     elif mode == "practice":
         mode = "free_chat"       # no profile yet → nothing to target
     session_id = db.create_session(mode, sid_key, scen, targets)

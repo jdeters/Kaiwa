@@ -34,6 +34,9 @@ Rules:
   for the intended word (category "spelling" or "word choice").
 - Keep corrections within what the student has learned where possible: prefer the simplest
   correct fix.
+- A word that isn't Japanese — an English word in katakana that Japanese doesn't use (メデキン
+  for "medicine") or a made-up word — IS an error (category "word choice"): give the real
+  Japanese word in "right" even if the student hasn't learned it, and say so in the explanation.
 - If the message is in English or not Japanese, set has_errors=false, errors=[], and praise to a gentle nudge to try Japanese.
 - Maximum 3 errors (most important first).
 IMPORTANT: "explanation" and "praise" MUST be written in ENGLISH.
