@@ -1,6 +1,6 @@
 """Japanese text processing: tokenization, furigana (ruby), romaji.
 
-Primary tokenizer: fugashi (MeCab + unidic-lite). Fallback: janome (pure python).
+Tokenizer: fugashi (MeCab + unidic-lite).
 """
 import re
 import unicodedata
@@ -80,27 +80,14 @@ def romaji(text: str) -> str:
 # ---------------------------------------------------------------- tokenizers
 
 _tagger = None
-_janome = None
-_backend = None
 
 
-def _init_backend():
-    global _tagger, _janome, _backend
-    if _backend:
-        return
-    try:
+def _tagger_():
+    global _tagger
+    if _tagger is None:
         import fugashi
         _tagger = fugashi.Tagger()
-        _backend = "fugashi"
-    except Exception:
-        from janome.tokenizer import Tokenizer
-        _janome = Tokenizer()
-        _backend = "janome"
-
-
-def backend_name() -> str:
-    _init_backend()
-    return _backend
+    return _tagger
 
 
 # UniDic defaults that confuse learners: 私 → ワタクシ, 日本 → ニッポン.
@@ -109,28 +96,20 @@ _READING_OVERRIDES = {"私": "ワタシ", "日本": "ニホン"}
 
 def _tokenize(text: str):
     """Yield (surface, reading_katakana_or_None, pos)."""
-    _init_backend()
-    if _backend == "fugashi":
-        prev_pos2 = ""
-        for w in _tagger(text):
-            kana = _READING_OVERRIDES.get(w.surface)
-            pos2 = str(getattr(w.feature, "pos2", "") or "")
-            if not kana and w.surface == "人" and prev_pos2 == "固有名詞":
-                kana = "ジン"  # unidic-lite says ニン even for 日本人/アメリカ人
-            if not kana:
-                try:
-                    kana = w.feature.kana or w.feature.pron  # unidic: kana reading
-                except Exception:
-                    pass
-            pos = w.feature.pos1 if hasattr(w.feature, "pos1") else ""
-            prev_pos2 = pos2
-            yield w.surface, kana, str(pos or "")
-    else:
-        for t in _janome.tokenize(text):
-            kana = t.reading if t.reading != "*" else None
-            kana = _READING_OVERRIDES.get(t.surface, kana)
-            pos = t.part_of_speech.split(",")[0]
-            yield t.surface, kana, pos
+    prev_pos2 = ""
+    for w in _tagger_()(text):
+        kana = _READING_OVERRIDES.get(w.surface)
+        pos2 = str(getattr(w.feature, "pos2", "") or "")
+        if not kana and w.surface == "人" and prev_pos2 == "固有名詞":
+            kana = "ジン"  # unidic-lite says ニン even for 日本人/アメリカ人
+        if not kana:
+            try:
+                kana = w.feature.kana or w.feature.pron  # unidic: kana reading
+            except Exception:
+                pass
+        pos = w.feature.pos1 if hasattr(w.feature, "pos1") else ""
+        prev_pos2 = pos2
+        yield w.surface, kana, str(pos or "")
 
 
 # ------------------------------------------------------------- ruby aligner
@@ -218,17 +197,11 @@ def _annotate_line(text: str) -> list:
 
 def lemma_of(word: str) -> str | None:
     """Dictionary form of the (first word in) `word`, e.g. 食べ → 食べる."""
-    _init_backend()
     try:
-        if _backend == "fugashi":
-            for w in _tagger(word):
-                lemma = str(w.feature.lemma or "")
-                # unidic lemmas can look like "カード-card" — keep the JP part
-                lemma = lemma.split("-")[0]
-                return lemma or None
-        else:
-            for t in _janome.tokenize(word):
-                return t.base_form if t.base_form != "*" else None
+        for w in _tagger_()(word):
+            lemma = str(w.feature.lemma or "")
+            # unidic lemmas can look like "カード-card" — keep the JP part
+            return lemma.split("-")[0] or None
     except Exception:
         return None
     return None

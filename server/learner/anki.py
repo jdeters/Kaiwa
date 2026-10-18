@@ -60,9 +60,5 @@ def lesson_of(deck_name: str, pattern: str) -> int | None:
     return max(int(g) for g in m.groups() if g)
 
 
-def ping(url: str = DEFAULT_URL) -> int:
-    return call("version", url)
-
-
 if __name__ == "__main__":
     print(json.dumps(call("deckNames"), ensure_ascii=False))

@@ -285,7 +285,7 @@ def reply(session: dict, db_messages: list, kaiwa_profile: dict, client, model: 
     chosen = next((a for a in t.attempts if a["japanese"] == t.japanese), {})   # {} if salvaged
     reading = chosen.get("reading", "")
     return {
-        "japanese": t.japanese, "display": t.display, "english": t.english,
+        "japanese": t.japanese, "english": t.english,
         "tokens": tokens(t.japanese, reading),
         "meta": {"model": model, "ok": t.ok, "salvaged": t.salvaged, "seconds": t.seconds,
                  "drafts": len(t.attempts), "reading": reading,

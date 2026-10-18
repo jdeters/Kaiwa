@@ -39,7 +39,6 @@ input, select { font-family: inherit; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .logo-icon { color: var(--accent); width: 1.3em; height: 1.3em; }
 .sect-icon, .h1-icon { color: var(--indigo); }
-.big-icon { width: 2.4em; height: 2.4em; color: var(--amber); }
 button, .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .nav-btn em { font-style: normal; }
 
@@ -99,7 +98,6 @@ h1 { font-size: 1.7rem; font-weight: 800; }
 .mode-card h3 { margin: 8px 0 4px; }
 .mode-card p { color: var(--sub); font-size: .9rem; }
 
-.scenario-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; }
 .cat-title { font-weight: 700; color: var(--sub); font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; margin: 18px 0 10px; }
 .scen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; }
 .scen-card {
@@ -390,7 +388,6 @@ ruby rt { font-size: .55em; color: var(--accent); font-weight: 600; }
 .voice-row { display: flex; gap: 8px; align-items: center; }
 .voice-row select { flex: 1; min-width: 0; }
 .voice-row .icon-btn { border: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
-.link-list { display: flex; flex-direction: column; gap: 10px; }
 .data-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .data-btns .btn { border: 1px solid var(--border); background: var(--panel); font-size: .85rem; padding: 8px 14px; border-radius: 10px; text-decoration: none; color: var(--ink); font-weight: 600; }
 .data-btns .reset-btn { color: #d9534f; border-color: #d9534f55; }
@@ -398,8 +395,6 @@ ruby rt { font-size: .55em; color: var(--accent); font-weight: 600; }
 .qr-wrap { display: flex; justify-content: center; padding: 10px; }
 .qr-wrap svg { border-radius: 8px; }
 #phone-setup .sub { margin-bottom: 8px; line-height: 1.6; }
-.ext-link { display: inline-flex; align-items: center; gap: 8px; color: var(--indigo); font-weight: 600; text-decoration: none; font-size: .9rem; }
-.ext-link:hover { text-decoration: underline; }
 
 /* phone: sidebar becomes a bottom tab bar (PWA-friendly) */
 @media (max-width: 760px) {

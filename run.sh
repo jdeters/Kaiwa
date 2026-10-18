@@ -48,8 +48,12 @@ if [ -x "$TS" ] && "$TS" status >/dev/null 2>&1; then
   [ -n "$TSHOST" ] && echo "📱 phone link: https://$TSHOST"
 fi
 
-# 3. App server (0.0.0.0 so phones on the network can connect)
+# 3. App server. Only this computer can reach it: there's no login, so anyone who
+# can connect could read your conversations and use your API key. Phones get in
+# through the Tailscale link above (it proxies to localhost). KAIWA_HOST=0.0.0.0
+# opens it to your whole network instead.
+HOST="${KAIWA_HOST:-127.0.0.1}"
 echo "▶ starting Kaiwa at http://localhost:$PORT"
 OPEN=$(command -v xdg-open || command -v open || true)
 [ -n "$OPEN" ] && (sleep 2 && "$OPEN" "http://localhost:$PORT" >/dev/null 2>&1) &
-exec .venv/bin/python -m uvicorn server.main:app --host 0.0.0.0 --port "$PORT"
+exec .venv/bin/python -m uvicorn server.main:app --host "$HOST" --port "$PORT"

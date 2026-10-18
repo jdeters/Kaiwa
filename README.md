@@ -71,6 +71,15 @@ the [VOICEVOX](https://voicevox.hiroshiba.jp/) engine, also local.
 `--with-voicevox` downloads the Linux x64 build (~1.8 GB); on other platforms,
 unzip the engine for your OS into `vendor/`.
 
+## Configuration
+
+| Variable | Default | What |
+|---|---|---|
+| `KAIWA_PORT` | `8130` | Web app port |
+| `KAIWA_HOST` | `127.0.0.1` | Only this computer can connect (there's no login). Phones connect through Tailscale (Settings → On your phone); `0.0.0.0` opens it to your whole network |
+| `KAIWA_WHISPER_MODEL` | `medium` | Speech recognition model (`small`, `medium`, `large-v3-turbo`) |
+| `KAIWA_DB` | `data/kaiwa.db` | Database file (point tests or experiments elsewhere) |
+
 ## How it works
 
 | Piece | Where |

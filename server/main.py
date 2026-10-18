@@ -203,8 +203,8 @@ def session_messages(sid: int):
 async def chat(req: Request):
     """One partner turn as SSE. The reply is generated, validated against the
     learner profile, and repaired before anything is sent, so it arrives whole:
-    `speak` is the kanji original (TTS, lookups), `tokens`/`display` show known
-    kanji only. Empty text lets the partner open the scene."""
+    `speak` is the text (TTS, lookups), `tokens` the furigana-annotated bubble.
+    Empty text lets the partner open the scene."""
     body = await req.json()
     sid = body["session_id"]
     text = (body.get("text") or "").strip()
@@ -232,7 +232,7 @@ async def chat(req: Request):
                              meta=r["meta"])
         final = {
             "done": True, "message_id": mid, "tokens": r["tokens"],
-            "romaji": jp.romaji(r["japanese"]), "speak": r["japanese"], "display": r["display"],
+            "romaji": jp.romaji(r["japanese"]), "speak": r["japanese"],
         }
         yield f"data: {json.dumps(final)}\n\n"
 

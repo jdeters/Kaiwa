@@ -2,7 +2,6 @@ fastapi
 uvicorn[standard]
 fugashi
 unidic-lite
-janome
 pykakasi
 requests
 python-multipart

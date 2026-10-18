@@ -28,7 +28,6 @@ class Result:
     text: str
     violations: list = field(default_factory=list)
     proper_nouns: list = field(default_factory=list)
-    concepts_used: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -78,7 +77,6 @@ def validate(text: str, profile: Profile, concepts: dict | None = None) -> Resul
             res.violations.append(Violation("grammar", span, f"uses {h.label}, which isn't in the learner's grammar"))
             continue
         if any(o in profile.grammar for o in h.options):
-            res.concepts_used += [o for o in h.options if o in profile.grammar][:1]
             continue
         names = " / ".join(concepts[o]["name"] for o in h.options if o in concepts)
         res.violations.append(Violation("grammar", span, f"uses {h.label} ({names}), not learned yet"))
