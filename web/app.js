@@ -870,7 +870,9 @@ async function ankiSync(msgEl) {
   const lesson = +$("#set-lesson").value || undefined;
   const r = await api.post("/api/learner/build", lesson ? { lesson } : {}).catch(e => ({ error: e.message }));
   if (r.error) { msgEl.textContent = r.error; return false; }
-  msgEl.textContent = "Updated ✓";
+  const gaps = r.reading_gaps || [];   // card readings the app mishandles: worth a bug report
+  msgEl.textContent = gaps.length ? `Updated ✓ — ${gaps.length} reading issue${gaps.length > 1 ? "s" : ""}: ${gaps.join("; ")}`
+                                  : "Updated ✓";
   showLearnerStatus(r);
   loadIme();          // new kanji → new typing suggestions
   updateHealth();

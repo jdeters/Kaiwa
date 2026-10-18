@@ -26,8 +26,6 @@ from .profile import Profile
 GODAN = {"う": "わいうえおっ", "く": "かきくけこい", "ぐ": "がぎぐげごい", "す": "さしすせそ",
          "つ": "たちつてとっ", "ぬ": "なにぬねのん", "ぶ": "ばびぶべぼん", "む": "まみむめもん",
          "る": "らりるれろっ"}
-# readings UniDic doesn't give as the dictionary form but learners type constantly
-EXTRA_READINGS = {"何": ["なに"]}
 
 
 def table(profile: Profile) -> dict:
@@ -38,16 +36,8 @@ def table(profile: Profile) -> dict:
         if kana and kanji != kana and kanji not in out.setdefault(kana, []):
             out[kana].append(kanji)
 
-    for orth in sorted(profile.kanji):
-        toks = morph.tokenize(orth)
-        if len(toks) != 1:  # compounds the tokenizer splits: whole word only
-            add("".join(t.kana for t in toks), orth)
-            continue
-        t = toks[0]
-        reading = t.kana
+    def add_word(orth: str, reading: str, t):
         add(reading, orth)
-        for r in EXTRA_READINGS.get(orth, []):
-            add(r, orth)
         if t.pos1 == "動詞" and len(orth) > 1 and orth[-1] == reading[-1]:
             stem, rstem = orth[:-1], reading[:-1]
             if t.ctype.startswith(("上一段", "下一段")):      # 食べ(る), 見(る)
@@ -61,6 +51,20 @@ def table(profile: Profile) -> dict:
         elif t.pos1 == "形容詞" and orth.endswith("い") and reading.endswith("い"):
             for c in "いくかけ":                              # 高い / 高くない / 高かった / 高ければ
                 add(reading[:-1] + c, orth[:-1] + c)
+
+    for orth in sorted(profile.kanji):
+        toks = morph.tokenize(orth)
+        if len(toks) != 1:  # compounds the tokenizer splits: whole word only
+            add("".join(t.kana for t in toks), orth)
+        else:
+            add_word(orth, toks[0].kana, toks[0])
+    # the deck's own readings, where UniDic's differ (私 わたし, 家 うち, 土曜日 どようび, 四つ よっつ)
+    for orth, reading in sorted(profile.kanji_readings.items()):
+        toks = morph.tokenize(orth)
+        if len(toks) == 1:
+            add_word(orth, reading, toks[0])
+        else:
+            add(reading, orth)
     _add_single_kanji(profile, out)
     return out
 

@@ -105,6 +105,7 @@ def build(cfg: dict) -> dict:
     whole_kana: set = set()   # readings of whole kana-only entries
     pieces: list = []         # readings of pieces of kana-only entries, pending corroboration
     kanji: dict = {}     # written form (orthBase) → source, for words whose kanji is known
+    kanji_readings: dict = {}   # learned kanji entry → the deck's reading (私 → わたし, not UniDic's わたくし)
     kanji_min = TIER_RANK[cfg.get("kanji_min_tier", "familiar")]
     phrases: dict = {}   # hiragana → record
     stats = {}
@@ -139,10 +140,13 @@ def build(cfg: dict) -> dict:
                 for t in toks:
                     if _has_kanji(t.orth):
                         kanji.setdefault(t.orth, source)
+                if reading and _has_kanji(variant):
+                    kanji_readings.setdefault(variant, _hira(reading))
             content = [t for t in toks if t.content and t.pos2 != "数詞"]
-            if _has_kanji(variant) and len(content) > 1:
-                # A compound the tokenizer splits (土曜日 → 土曜 + 日) is one word,
-                # tracked whole; its pieces only license the tokens.
+            if _has_kanji(variant) and len(toks) > 1 and (
+                    len(content) > 1 or any(t.pos2 == "数詞" for t in toks)):
+                # A compound the tokenizer splits (土曜日 → 土曜 + 日, 一つ → 一 + つ)
+                # is one word, tracked whole; its pieces only license the tokens.
                 add_word(variant, _hira(reading) or _hira("".join(t.kana for t in toks)),
                          meaning, tier, source, n)
                 words[variant]["parts"] = [t.key for t in toks]
@@ -223,6 +227,7 @@ def build(cfg: dict) -> dict:
         "words": sorted(words.values(), key=lambda w: w["lemma"]),
         "phrases": sorted(phrases.values(), key=lambda p: p["kana"]),
         "kanji_words": dict(sorted(kanji.items())),
+        "kanji_readings": dict(sorted(kanji_readings.items())),
         "stats": stats,
     }
 
@@ -235,6 +240,14 @@ def save(snapshot: dict, path: str = SNAPSHOT_PATH):
 
 # --------------------------------------------------------------------- load
 
+_NUMERALS = set("〇一二三四五六七八九十百千万億")
+
+
+def _numeral(s: str) -> bool:
+    """百, 千, 二十: numbers, which are always allowed and never tracked as words."""
+    return bool(s) and all(c in _NUMERALS for c in s)
+
+
 class Profile:
     def __init__(self, snapshot: dict):
         self.snapshot = snapshot
@@ -246,20 +259,30 @@ class Profile:
                 self.readings.setdefault(w["reading"], w)
         self.phrases = [p["kana"] for p in snapshot["phrases"] if len(p["kana"]) >= 2]
         self.kanji = set(snapshot.get("kanji_words", {}))  # written forms shown in kanji
+        self.kanji_readings = snapshot.get("kanji_readings", {})   # 私 → わたし, as the deck reads it
         # compounds the tokenizer splits, by their tokens' keys, longest first
         self.compounds = sorted(((tuple(w["parts"]), w["lemma"]) for w in snapshot["words"]
                                  if w.get("parts")), key=lambda c: -len(c[0]))
+        with open(os.path.join(grammar.CONTENT, "closed_class.yaml"), encoding="utf-8") as f:
+            self.closed = set(yaml.safe_load(f)["words"])
         # one id per word for tracking: a lemma (飲む), or "reading:…" for words
-        # known only in kana; a kana reading of a known lemma maps to the lemma
+        # known only in kana; a kana reading of a known lemma maps to the lemma —
+        # the deck's reading first (うち → 家, though UniDic reads 家 いえ)
         self.word_ids = {}
+        # card readings of words that aren't tracked (時 とき is closed-class, 百
+        # ひゃく a number): their kana entries mustn't become practice targets
+        self._untracked_readings = set()
+        for orth, reading in self.kanji_readings.items():
+            if orth in self.lemmas and not _numeral(orth):
+                self.word_ids.setdefault(reading, orth)
+            elif orth in self.closed or _numeral(orth):
+                self._untracked_readings.add(reading)
         for w in self.lemmas.values():
             if w["reading"]:
                 self.word_ids.setdefault(w["reading"], w["lemma"])
         for w in snapshot["words"]:
             if w["lemma"].startswith("reading:"):
                 self.word_ids.setdefault(w["reading"], w["lemma"])
-        with open(os.path.join(grammar.CONTENT, "closed_class.yaml"), encoding="utf-8") as f:
-            self.closed = set(yaml.safe_load(f)["words"])
 
     @classmethod
     def load(cls, path: str = SNAPSHOT_PATH) -> "Profile":
@@ -330,7 +353,9 @@ class Profile:
                                     rank.get((self.lemmas.get(i) or {}).get("tier"), 4), i))
         words = {w["lemma"]: w for w in self.snapshot["words"]}
         return [i for i in ids if not words.get(i, {}).get("part") and i not in self.closed
-                and words.get(i, {}).get("reading", "x") not in self.closed]
+                and words.get(i, {}).get("reading", "x") not in self.closed
+                and words.get(i, {}).get("reading", "x") not in self._untracked_readings
+                and not _numeral(i)]
 
     def vocab_for_prompt(self) -> list[str]:
         """Known words for the generation prompt: "lemma(reading)", or bare kana

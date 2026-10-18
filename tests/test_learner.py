@@ -128,12 +128,15 @@ def test_ime_offers_only_learned_kanji(profile):
 def test_ime_conjugation_stems():
     snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "words": [], "phrases": [],
             "kanji_words": {"食べる": "Core 2000", "高い": "Core 2000", "来る": "Core 2000",
-                            "何": "Core 2000"}}
+                            "何": "Core 2000", "私": "Core 2000"},
+            # the deck's readings, where UniDic's differ (何 なん, 私 わたくし)
+            "kanji_readings": {"何": "なに", "私": "わたし"}}
     t = ime.table(Profile(snap))
     assert t["たべ"] == ["食べ"]
     assert t["たかく"] == ["高く"] and t["たかか"] == ["高か"]    # 高くない / 高かった
     assert t["き"] == ["来"] and t["こ"] == ["来"]
     assert "何" in t["なに"] and "何" in t["なん"]
+    assert t["わたし"] == ["私"]     # the whole word, not 私 for the し
 
 
 # ------------------------------------------------------------- production tracking
@@ -344,3 +347,16 @@ def test_split_compounds_are_one_tracked_word(monkeypatch):
     assert validator.validate("土曜日に友達と行きます。", p).violations[0].text == "行き"  # pieces license
     obs = production.observe("土曜日に友達と。", p)
     assert {(o.item, o.surface) for o in obs if o.kind == "word"} == {("土曜日", "土曜日"), ("友達", "友達")}
+
+
+def test_card_readings_track_as_the_same_word():
+    from server.learner import production
+    snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "phrases": [],
+            "words": [_word("家", "いえ"), _word("reading:うち", "うち"), _word("百", "ひゃく"),
+                      _word("reading:ひゃく", "ひゃく"), _word("reading:とき", "とき")],
+            "kanji_words": {"家": "Core 2000"},
+            "kanji_readings": {"家": "うち", "百": "ひゃく", "時": "とき"}}
+    p = Profile(snap)
+    said = lambda text: {o.item for o in production.observe(text, p) if o.kind == "word"}
+    assert said("うち") == said("家") == {"家"}        # UniDic reads 家 いえ, the card うち
+    assert not {"reading:うち", "百", "reading:ひゃく", "reading:とき"} & set(p.word_list())

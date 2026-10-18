@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime
 
-from . import display, generate, grammar, ime, practice, production, validator
+from . import display, generate, grammar, ime, morph, practice, production, validator
 from . import profile as profile_store
 from .profile import SNAPSHOT_PATH, Profile
 
@@ -65,7 +65,41 @@ def rebuild(lesson: int | None = None) -> dict:
     profile_store.save(profile_store.build(cfg))
     if lesson is not None:   # only once the import worked, so config and profile agree
         profile_store.set_config_lesson(lesson)
-    return status()   # profile() notices the new snapshot by its mtime
+    return {**status(), "reading_gaps": reading_gaps()}   # profile() notices the new snapshot by its mtime
+
+
+def reading_gaps(p: Profile | None = None) -> list:
+    """Learned kanji words the app handles differently from their card's reading
+    (UniDic reads 私 わたくし, the card わたし). Checked after every import, so a
+    new mismatch shows up there instead of mid-conversation:
+    - typing the card's reading doesn't suggest the word;
+    - the kanji and kana spellings are tracked as two different words;
+    - the word is a practice target but can't be tracked when written in kanji."""
+    p = p or profile()
+    table, out = ime.table(p), []
+    targets = set(p.word_list())
+
+    def whole(text, sound=None):
+        """The word id when text parses as one tracked word (and, for kana, as
+        that same sound: いれる read as a form of いる is the tokenizer guessing
+        between words, not a tracking mismatch)."""
+        toks = morph.tokenize(text)
+        spans = p.word_spans(toks)
+        if len(spans) != 1 or spans[0][:2] != (0, len(toks)):
+            return None
+        if sound and "".join(t.lform for t in toks) != sound:
+            return None
+        return spans[0][2]
+
+    for orth, reading in sorted(p.kanji_readings.items()):
+        if orth not in table.get(reading, []):
+            out.append(f"typing {reading} doesn't suggest {orth}")
+        as_kanji, as_kana = whole(orth), whole(reading, reading)
+        if as_kanji and as_kana and as_kanji != as_kana:
+            out.append(f"{orth} and {reading} are tracked as different words ({as_kanji} / {as_kana})")
+        elif as_kana in targets and not as_kanji and orth in p.lemmas:
+            out.append(f"{orth} ({reading}) is a practice target but isn't tracked when written in kanji")
+    return out
 
 
 def describe() -> str:

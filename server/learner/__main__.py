@@ -26,6 +26,9 @@ def cmd_build(args):
     print(f"lesson {snap['lesson']} · {len(snap['grammar'])} grammar concepts · "
           f"{len(words)} words · {len(snap['phrases'])} phrases · notes per deck {snap['stats']}")
     print(f"→ {profile.SNAPSHOT_PATH}")
+    from . import service
+    for gap in service.reading_gaps(profile.Profile(snap)):
+        print(f"  reading check: {gap}")
 
 
 def cmd_check(args):
