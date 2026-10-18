@@ -314,3 +314,13 @@ def test_ime_single_kanji_by_attested_reading():
     assert t["らいねん"] == ["来年"]
     assert "来" in t["らい"]               # attested by 来年, so 来週 can be typed らい+しゅう
     assert "来" not in t.get("たい", [])   # a rare reading of 来, not attested: left out
+
+
+def test_spaced_words_trusts_the_textbook_spacing():
+    from server.learner.profile import spaced_words
+    assert spaced_words("いかがですか。") == {"いかが"}
+    assert spaced_words("あまり テレビを みません") == {"あまり", "てれび", "みる"}
+    assert spaced_words("ぜんぜん...〜ません") == {"ぜんぜん"}
+    assert spaced_words("おじゃまします") == {"じゃま"}               # past the お prefix
+    assert spaced_words("オレンジジュース") == {"おれんじ", "じゅーす"}  # loanword compound
+    assert spaced_words("かいしゃ") == set() and spaced_words("よやく") == set()   # misparses

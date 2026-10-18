@@ -170,7 +170,8 @@ def create_session(body: dict = Body(...)):   # sync: practice scenes call Claud
         # a scene built around the targets, so they're the natural thing to say
         s = settings()
         try:
-            scen, targets = learner.design_scene(targets, llm.client(s), llm.model(s))
+            scen, targets = learner.design_scene(targets, llm.client(s), llm.model(s),
+                                                 recent=db.recent_practice_scenes())
             sid_key = "practice"
         except Exception:
             mode = "free_chat"   # still a conversation with the same targets

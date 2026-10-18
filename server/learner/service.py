@@ -171,9 +171,32 @@ SCENE_SCHEMA = {
 }
 
 
-def design_scene(targets: list, client, model: str) -> tuple:
+# Varied everyday settings to draw from: left alone, scene design gravitates to
+# restaurants. Each new scene is offered a random few.
+SCENE_SETTINGS = [
+    "a coworker's desk during a break at the office", "a train station ticket gate",
+    "a neighbor's doorstep in your apartment building", "a hobby class (cooking, pottery, guitar…)",
+    "a doctor's or dentist's reception desk", "a hotel front desk at check-in",
+    "a phone call with a friend making weekend plans", "a park on a sunny morning",
+    "a bookstore or library counter", "a gym or swimming pool reception",
+    "a friend's home, visiting for the first time", "a taxi ride", "a post office counter",
+    "a business meeting introducing yourself to a client", "a bus stop asking about routes",
+    "a supermarket checkout", "a clothing store fitting room", "a festival or event booth",
+    "an electronics store", "a language exchange meetup", "a school or university office",
+    "a hair salon", "a pharmacy", "a lost-and-found counter", "a museum or temple entrance",
+    "a garden helping a neighbor", "a car or bike rental shop", "a birthday party",
+]
+
+
+def design_scene(targets: list, client, model: str, recent: list = (),
+                 rng: random.Random | None = None) -> tuple:
     """A short roleplay built so that 3–4 of the targets come up naturally.
+    recent: titles/settings of the learner's last practice scenes, not to repeat.
     Returns (scenario dict for the session, the targets it uses)."""
+    rng = rng or random.Random()
+    ideas = "\n".join(f"- {s}" for s in rng.sample(SCENE_SETTINGS, 5))
+    avoid = ("\nThe learner's recent practice scenes — use a clearly different place and situation:\n"
+             + "\n".join(f"- {r}" for r in recent)) if recent else ""
     listed = "\n".join(
         f"- {t['item']}: {t['label']} — {t['meaning']}" + (f" (e.g. {t['example']})" if t.get("example") else "")
         for t in targets)
@@ -186,6 +209,11 @@ Pick 3–4 of them that could all come up naturally in ONE plausible, simple eve
 (include at least one grammar item if any fits), and design that situation so the learner
 will need to say them. The partner (a Japanese speaker) starts the conversation; the learner
 replies using only beginner Japanese.
+
+Set it in one of these places (pick the one that fits the targets best), or somewhere equally
+different from a restaurant or café:
+{ideas}
+{avoid}
 
 Return JSON:
 - title: short scene title in English

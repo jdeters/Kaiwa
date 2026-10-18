@@ -132,6 +132,18 @@ def create_session(mode: str, scenario_id: str | None, scenario: dict | None,
         return cur.lastrowid
 
 
+def recent_practice_scenes(limit: int = 6) -> list:
+    """Title + setting of the latest practice scenes (so new ones can differ)."""
+    with _conn() as c:
+        rows = c.execute("SELECT scenario FROM sessions WHERE mode='practice' AND scenario IS NOT NULL "
+                         "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    out = []
+    for (scen,) in rows:
+        s = json.loads(scen)
+        out.append(f"{s.get('title', '')} — {s.get('setting', '')}")
+    return out
+
+
 def get_session(sid: int) -> dict | None:
     with _conn() as c:
         r = c.execute("SELECT * FROM sessions WHERE id=?", (sid,)).fetchone()

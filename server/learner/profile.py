@@ -58,6 +58,31 @@ def entry_variants(text: str) -> list[str]:
     return out
 
 
+_KATAKANA = re.compile(r"[ァ-ヺー]+")
+
+
+def spaced_words(text: str) -> set:
+    """Readings of the words a kana entry spells out between spaces/punctuation:
+    a chunk counts when it's one word plus only endings or particles (いかが ですか,
+    ありがとう ございます, おおさか に). The textbook writes kana with spaces between
+    words, so this is a reliable boundary; a chunk the tokenizer splits into two
+    words (よやく → よ + やく) or that starts with a particle (かいしゃ → か + いしゃ)
+    gives nothing."""
+    out = set()
+    for chunk in re.split(r"[\s、。！？!?・/／()（）〜～.…]+", text):
+        toks = morph.tokenize(chunk) if chunk else []
+        while toks and toks[0].pos1 == "接頭辞":      # お/ご: おてあらい, おじゃまします
+            toks = toks[1:]
+        if not toks or not toks[0].content:
+            continue
+        tail = toks[1:]
+        if all(t.pos1 in ("助詞", "助動詞") or t.pos2 == "非自立可能" for t in tail):
+            out.add(toks[0].lform)
+        # loanword compounds split reliably: オレンジジュース → オレンジ, ジュース
+        out |= {t.lform for t in toks if t.content and _KATAKANA.fullmatch(t.surface)}
+    return out
+
+
 def _min_lesson(a, b):
     return b if a is None else a if b is None else min(a, b)
 
@@ -124,13 +149,10 @@ def build(cfg: dict) -> dict:
                 # the entry whole. Its pieces wait for corroboration (below).
                 add_reading(_hira(variant), meaning, tier, source, n, part=len(content) > 1)
                 whole_kana.add(_hira(variant))
-                verb_form = (len(content) == 1 and toks[0] is content[0]
-                             and content[0].pos1 in ("動詞", "形容詞")
-                             and all(t.pos1 in ("助動詞", "助詞") for t in toks[1:]))
                 for t in content:
                     if len(t.lform) >= 2:
                         pieces.append((t.lform, meaning if len(content) == 1 else "", tier, source, n,
-                                       len(content) > 1, verb_form))
+                                       len(content) > 1, t.lform in spaced_words(text)))
             # Every entry is also licensed whole by its kana: covers multi-word
             # entries (まってください) and compounds the tokenizer splits
             # differently in kanji (ふじさん vs 富士 + 山).
@@ -174,8 +196,8 @@ def build(cfg: dict) -> dict:
 
     # A piece of a kana-only entry counts only if something backs it up: it's a
     # whole entry itself (ひる from ひるごはん), the reading of a word learned
-    # with its kanji (いく for 行く), or the entry is a verb/adjective plus
-    # endings (いきます → いく). Misparse leftovers (いしゃ, やく) are dropped.
+    # with its kanji (いく for 行く), or the textbook's own spacing marks it as a
+    # word (spaced_words). Misparse leftovers (いしゃ, やく) are dropped.
     lemma_readings = {w["reading"] for k, w in words.items() if not k.startswith("reading:")}
     for kana, meaning, tier, source, n, part, verb_form in pieces:
         if verb_form or kana in whole_kana or kana in lemma_readings:
