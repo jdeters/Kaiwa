@@ -5,10 +5,13 @@ Builds data/jmdict.db (SQLite) once from models/jmdict-eng-*.json.
 import glob
 import json
 import os
+import re
 import sqlite3
+from functools import lru_cache
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, "data", "jmdict.db")
+SPELLINGS = os.path.join(ROOT, "data", "jmdict_spellings.json")
 
 
 def _source_json() -> str | None:
@@ -61,6 +64,38 @@ def build_if_needed():
     con.commit()
     con.close()
     print(f"[dictionary] done: {len(rows)} forms indexed")
+
+
+@lru_cache(maxsize=1)
+def spellings() -> dict:
+    """{kana: [[kanji spelling, gloss words], …]}: the common kanji spellings of
+    common words not usually written in kana (にほん → 日本 "japan"), extracted
+    once from the JMdict source
+    into data/jmdict_spellings.json. Per spelling, unlike jmdict.db's common
+    flag, so rare variants (すき焼, 鋤焼き) stay out."""
+    if not os.path.exists(SPELLINGS):
+        src = _source_json()
+        if not src:
+            return {}
+        with open(src, encoding="utf-8") as f:
+            words = json.load(f)["words"]
+        out: dict = {}
+        for w in words:
+            forms = [k["text"] for k in w.get("kanji", []) if k.get("common")]
+            senses = w.get("sense", [])
+            if not forms or (senses and "uk" in senses[0].get("misc", [])):   # usually kana: いつも, ください
+                continue
+            glosses = " ".join(g["text"] for s in w.get("sense", [])[:3] for g in s.get("gloss", []))
+            gloss_words = sorted(set(re.findall(r"[a-z]+", glosses.lower())))
+            for k in w.get("kana", []):
+                applies = k.get("appliesToKanji") or ["*"]
+                for form in forms:
+                    if k.get("common") and ("*" in applies or form in applies):
+                        out.setdefault(k["text"], []).append([form, gloss_words])
+        with open(SPELLINGS, "w", encoding="utf-8") as f:
+            json.dump(out, f, ensure_ascii=False)
+    with open(SPELLINGS, encoding="utf-8") as f:
+        return json.load(f)
 
 
 _con = None

@@ -319,6 +319,23 @@ def test_ime_single_kanji_by_attested_reading():
     assert "来" not in t.get("たい", [])   # a rare reading of 来, not attested: left out
 
 
+
+def test_ime_spells_known_kana_words_with_learned_kanji(monkeypatch):
+    if not ime._kanjidic():
+        pytest.skip("KANJIDIC2 not downloaded (./setup.sh)")
+    from server import dictionary
+    monkeypatch.setattr(dictionary, "spellings", lambda: {
+        "にほん": [["日本", ["japan"]]],
+        "ぜんぶ": [["前部", ["front", "part"]], ["全部", ["all", "entire"]]]})
+    snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "phrases": [],
+            "words": [{**_word("reading:にほん", "にほん"), "meaning": "Japan"},
+                      {**_word("reading:ぜんぶ", "ぜんぶ"), "meaning": "all, wholly"}],
+            "kanji_words": {"日曜": "Core 2000", "本": "Core 2000", "前": "Core 2000", "部": "Core 2000"}}
+    t = ime.table(Profile(snap))
+    assert t["にほん"] == ["日本"]          # textbook kana word, both kanji learned
+    assert "日" in t["に"]                  # 日本 − 本 ほん: に, a shortened にち
+    assert "ぜんぶ" not in t                # 前部 is another word; 全部's 全 isn't learned
+
 def test_spaced_words_trusts_the_textbook_spacing():
     from server.learner.profile import spaced_words
     assert spaced_words("いかがですか。") == {"いかが"}
