@@ -19,6 +19,19 @@ echo "▶ installing dependencies…"
 
 mkdir -p data models
 
+# KANJIDIC2 per-kanji readings (typing suggestions: らい → 来)
+if ! ls models/kanjidic2-en-*.json >/dev/null 2>&1; then
+  echo "▶ downloading KANJIDIC2…"
+  KD_URL=$(curl -s https://api.github.com/repos/scriptin/jmdict-simplified/releases/latest \
+    | grep -o '"browser_download_url": *"[^"]*kanjidic2-en-[^"]*\.json\.zip"' \
+    | head -1 | cut -d'"' -f4)
+  if [ -n "$KD_URL" ]; then
+    curl -L --progress-bar -o /tmp/kaiwa-kanjidic.zip "$KD_URL"
+    unzip -oq /tmp/kaiwa-kanjidic.zip -d models/
+    rm -f /tmp/kaiwa-kanjidic.zip
+  fi
+fi
+
 # speech-recognition model for faster-whisper (medium, ~1.5 GB; KAIWA_WHISPER_MODEL overrides)
 if [ -z "$(find models/whisper -name model.bin 2>/dev/null)" ]; then
   echo "▶ downloading speech-recognition model…"

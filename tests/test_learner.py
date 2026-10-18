@@ -303,3 +303,14 @@ def test_chat_bubbles_keep_all_kanji_with_furigana(profile):
     r = display.render("富士山に行きました。", profile, reading="ふじさんにいきました。", all_kanji=True)
     assert r.display == "富士山に行きました。"
     assert {"t": "山", "r": "さん"} in [s for t in display.kaiwa_tokens(r) for s in t["ruby"]]
+
+
+def test_ime_single_kanji_by_attested_reading():
+    if not ime._kanjidic():
+        pytest.skip("KANJIDIC2 not downloaded (./setup.sh)")
+    snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "words": [], "phrases": [],
+            "kanji_words": {"来年": "Core 2000", "来る": "Core 2000"}}
+    t = ime.table(Profile(snap))
+    assert t["らいねん"] == ["来年"]
+    assert "来" in t["らい"]               # attested by 来年, so 来週 can be typed らい+しゅう
+    assert "来" not in t.get("たい", [])   # a rare reading of 来, not attested: left out

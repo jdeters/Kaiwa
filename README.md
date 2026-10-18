@@ -106,7 +106,8 @@ generate replies.
 Built on [Kaiwa](https://github.com/yeshsanchez/Kaiwa) by yeshsanchez
 (AGPL-3.0); this fork keeps that license.
 
-- Dictionary data from [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html)
+- Dictionary data from [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html) and
+  [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project)
   (via [jmdict-simplified](https://github.com/scriptin/jmdict-simplified)),
   property of the [EDRDG](https://www.edrdg.org/), used under
   [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html)
