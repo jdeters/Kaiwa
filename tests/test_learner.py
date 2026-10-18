@@ -324,3 +324,23 @@ def test_spaced_words_trusts_the_textbook_spacing():
     assert spaced_words("おじゃまします") == {"じゃま"}               # past the お prefix
     assert spaced_words("オレンジジュース") == {"おれんじ", "じゅーす"}  # loanword compound
     assert spaced_words("かいしゃ") == set() and spaced_words("よやく") == set()   # misparses
+
+
+def test_split_compounds_are_one_tracked_word(monkeypatch):
+    from server.learner import anki, production, profile as P
+    note = iter(range(1, 100))
+
+    def card(w, r, m):
+        return {"note": next(note), "fields": {"W": {"value": w}, "R": {"value": r}, "M": {"value": m}},
+                "type": 2, "interval": 30, "deckName": "Core"}
+    decks = {"Core": [card("土曜日", "どようび", "Saturday"), card("友達", "ともだち", "friend")]}
+    monkeypatch.setattr(anki, "deck_cards", lambda deck, url=None: decks[deck])
+    cfg = {"textbook": "jfbp-r4-kana", "lesson": 10, "sources": [
+        {"deck": "Core", "word_field": "W", "reading_field": "R", "meaning_field": "M",
+         "include": "studied", "kanji": True}]}
+    p = Profile(P.build(cfg))
+    assert "土曜日" in p.word_list() and "土曜" not in p.word_list()   # 土曜日 → 土曜 + 日
+    assert p.lemmas["土曜日"]["meaning"] == "Saturday"
+    assert validator.validate("土曜日に友達と行きます。", p).violations[0].text == "行き"  # pieces license
+    obs = production.observe("土曜日に友達と。", p)
+    assert {(o.item, o.surface) for o in obs if o.kind == "word"} == {("土曜日", "土曜日"), ("友達", "友達")}

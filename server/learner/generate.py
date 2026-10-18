@@ -236,7 +236,8 @@ class Partner:
     def _target_violations(self, text: str) -> list:
         if not self.avoid:
             return []
-        said = {self.profile.word_id(t): t.surface for t in morph.tokenize(text)}
+        toks = morph.tokenize(text)
+        said = {w: "".join(t.surface for t in toks[i:j]) for i, j, w in self.profile.word_spans(toks)}
         return [f"[target] 「{said[w]}」 is a practice target — don't say it; ask so the learner says it"
                 for w in self.avoid if w in said]
 

@@ -51,7 +51,7 @@ def observe(text: str, profile: Profile, prev_partner: str = "", errors=(), hint
     toks = morph.tokenize(text)
     hits = grammar.detect(toks)
     function = {i for h in hits for i in h.function}   # grammar tokens aren't vocabulary
-    partner_words = {profile.word_id(t) for t in morph.tokenize(prev_partner)} - {None}
+    partner_words = {w for *_, w in profile.word_spans(morph.tokenize(prev_partner))}
     # a span is an error if the correction's "wrong" fragment has it and the "right" one doesn't
     flagged = [(_hira(e.get("wrong", "")), _hira(e.get("right", ""))) for e in errors or ()]
 
@@ -89,13 +89,13 @@ def observe(text: str, profile: Profile, prev_partner: str = "", errors=(), hint
                 start = whole.find(u, start + 1)
 
     out, seen = [], set()
-    for i, t in enumerate(toks):
-        if i in unsure_idx:
+    for i, j, wid in profile.word_spans(toks):
+        if any(k in unsure_idx or k in function for k in range(i, j)):
             continue
-        wid = None if i in function else profile.word_id(t)
-        if wid and ("word", wid) not in seen:
+        if ("word", wid) not in seen:
             seen.add(("word", wid))
-            out.append(Observation("word", wid, outcome(t.kana, wid), t.surface))
+            out.append(Observation("word", wid, outcome("".join(t.kana for t in toks[i:j]), wid),
+                                   "".join(t.surface for t in toks[i:j])))
     for h in hits:
         if len(h.options) > 1:
             # に/で/と/から/の: use the labeled meaning, matched in order of appearance

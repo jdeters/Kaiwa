@@ -140,9 +140,21 @@ def build(cfg: dict) -> dict:
                     if _has_kanji(t.orth):
                         kanji.setdefault(t.orth, source)
             content = [t for t in toks if t.content and t.pos2 != "数詞"]
-            if _has_kanji(variant):
+            if _has_kanji(variant) and len(content) > 1:
+                # A compound the tokenizer splits (土曜日 → 土曜 + 日) is one word,
+                # tracked whole; its pieces only license the tokens.
+                add_word(variant, _hira(reading) or _hira("".join(t.kana for t in toks)),
+                         meaning, tier, source, n)
+                words[variant]["parts"] = [t.key for t in toks]
                 for t in content:
-                    add_word(t.key, t.lform, meaning if len(content) == 1 else "", tier, source, n)
+                    new = t.key not in words
+                    add_word(t.key, t.lform, "", tier, source, n)
+                    if new:
+                        words[t.key]["part"] = True
+            elif _has_kanji(variant):
+                for t in content:
+                    add_word(t.key, t.lform, meaning, tier, source, n)
+                    words[t.key].pop("part", None)   # a word in its own right too
             else:
                 # Kana-only entries tokenize unreliably (かいしゃ → か + いしゃ "doctor",
                 # よやく → よ + やく), so trust readings, not guessed lemmas, and match
@@ -234,6 +246,9 @@ class Profile:
                 self.readings.setdefault(w["reading"], w)
         self.phrases = [p["kana"] for p in snapshot["phrases"] if len(p["kana"]) >= 2]
         self.kanji = set(snapshot.get("kanji_words", {}))  # written forms shown in kanji
+        # compounds the tokenizer splits, by their tokens' keys, longest first
+        self.compounds = sorted(((tuple(w["parts"]), w["lemma"]) for w in snapshot["words"]
+                                 if w.get("parts")), key=lambda c: -len(c[0]))
         # one id per word for tracking: a lemma (飲む), or "reading:…" for words
         # known only in kana; a kana reading of a known lemma maps to the lemma
         self.word_ids = {}
@@ -289,6 +304,23 @@ class Profile:
             return tok.lemma
         return self.word_ids.get(tok.lform)
 
+    def word_spans(self, toks: list) -> list[tuple[int, int, str]]:
+        """(start, end, word id) for each tracked word in toks; a compound entry
+        the tokenizer splits (土曜日 → 土曜 + 日) is one word."""
+        out, i = [], 0
+        while i < len(toks):
+            for parts, lemma in self.compounds:
+                if tuple(t.key for t in toks[i:i + len(parts)]) == parts:
+                    out.append((i, i + len(parts), lemma))
+                    i += len(parts)
+                    break
+            else:
+                wid = self.word_id(toks[i])
+                if wid:
+                    out.append((i, i + 1, wid))
+                i += 1
+        return out
+
     def word_list(self) -> list[str]:
         """Every tracked word once, lemmas first (Core 2000, by tier), then
         kana-only textbook words; matching fragments are left out."""
@@ -305,6 +337,8 @@ class Profile:
         for words only known by reading (kana-only textbook entries)."""
         out, covered = [], set()
         for w in self.lemmas.values():
+            if w.get("part"):   # 土曜 of 土曜日: the compound is listed
+                continue
             out.append(w["lemma"] if w["lemma"] == w["reading"] or not w["reading"]
                        else f"{w['lemma']}({w['reading']})")
             covered.add(w["reading"])
