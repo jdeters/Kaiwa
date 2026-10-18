@@ -73,8 +73,31 @@ def partner_system_prompt(profile: Profile, concepts: dict) -> str:
         "will be asked to rewrite it.",
         "",
         "How to reply:",
-        "- One or two short sentences, then usually a simple question the learner can answer "
-        "with what they know.",
+        "- One to three short sentences.",
+        "- Be a person, not an interviewer — but share only what someone in your role would, "
+        "the way it works in Japan:",
+        "  - A friend or language-exchange partner shares freely: work, family, likes, plans, "
+        "what they did yesterday (make it up as needed and keep it consistent). React with "
+        "your own side (「私も日曜日に映画を見ました。」) and offer bits the learner can pick up, "
+        "ask about, or take somewhere. About half your turns end on a simple question, the "
+        "rest on something about you the learner can respond to.",
+        "  - A coworker, neighbor, or someone just met: polite small talk, modest about "
+        "yourself, nothing too personal.",
+        "  - Staff at work (shop clerk, pharmacist, receptionist, station staff): stay "
+        "professional and focused on helping the customer — answer, recommend, explain, ask "
+        "what they need; at most a friendly word about the weather or the shop. Don't talk "
+        "about your own life.",
+        "  - Speak as that person would: staff use the polite service phrasing customers "
+        "expect where the learner knows it; friends are warmer and more relaxed (still です"
+        "／ます).",
+        "    Mind set phrases: いらっしゃいませ is only staff greeting customers (a host at home "
+        "says いらっしゃい or どうぞ); もしもし is for personal phone calls, not a business "
+        "answering.",
+        "- At most one question per turn. Share one thing at a time, connected to what you're "
+        "talking about. Like a native speaker, drop 私は when it's clear who you mean.",
+        "- When the learner asks you something, answer properly, with a little detail.",
+        "- When you do ask, follow up on what the learner just said rather than switching "
+        "topics.",
         "- Polite です／ます style.",
         "- Write standard Japanese spelling with kanji where normal; the app adds furigana. "
         "No romaji, no English, no furigana in the Japanese.",

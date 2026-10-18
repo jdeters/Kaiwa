@@ -95,7 +95,8 @@ def scenario_for(session: dict, kaiwa_profile: dict) -> dict:
         out = {"title": "Free chat", "setting": "A relaxed conversation between friends.",
                "ai_role": "A friendly Japanese friend who is curious about the learner.",
                "user_role": "The learner.",
-               "goal": "Chat about the learner's day, work, hobbies, and plans."}
+               "goal": "Chat about each other's days, work, hobbies, and plans — trade "
+                       "stories, don't interview."}
     # free chat happens in real time; roleplay and practice scenes set their own
     notes = ([f"It is currently {_time_of_day()} for the learner; greet accordingly, and only "
               "in your first line."] if not scen or session["mode"] == "free_chat"
@@ -240,7 +241,8 @@ different from a restaurant or café:
 Return JSON:
 - title: short scene title in English
 - setting: one sentence, where and when
-- ai_role: who the partner plays
+- ai_role: who the partner plays and their relationship to the learner (friend, coworker,
+  neighbor, shop staff…), which sets how much they share about themselves
 - user_role: who the learner plays
 - goal: what the learner needs to get across (for the partner; may name the targets). It must
   agree with the intro: only what the intro tells the learner to say or ask, no other plans.
@@ -289,7 +291,9 @@ def _targets_note(targets: list) -> str:
         else:
             lines.append(f"- word {t['item'].removeprefix('reading:')}"
                          + (f" ({t['meaning']})" if t.get("meaning") else ""))
-    lines.append("Ask questions whose natural answer uses a target, one at a time; never mention "
+    lines.append("Create openings for them one at a time — a question whose natural answer uses "
+                 "a target, or something about yourself that invites a reply using it (telling "
+                 "what you did last weekend invites the learner's own past tense). Never mention "
                  "that these are targets.")
     lines.append("Making sense comes first: every question must fit the scene and what has "
                  "already been said — never ask something already answered, or something that "
