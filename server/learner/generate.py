@@ -76,9 +76,8 @@ def partner_system_prompt(profile: Profile, concepts: dict) -> str:
         "- One or two short sentences, then usually a simple question the learner can answer "
         "with what they know.",
         "- Polite です／ます style.",
-        "- Write standard Japanese spelling with kanji where normal; the app shows kanji only "
-        "for words the learner can read and converts the rest to kana. No romaji, no English, "
-        "no furigana in the Japanese.",
+        "- Write standard Japanese spelling with kanji where normal; the app adds furigana. "
+        "No romaji, no English, no furigana in the Japanese.",
         "- Write numbers with Arabic digits: 3時, 2,000円, 4人.",
         "- Use only words from the vocabulary list, the always-allowed words, numbers, and "
         "people's or places' names. Conjugate only with the grammar listed.",

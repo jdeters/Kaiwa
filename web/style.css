@@ -15,7 +15,7 @@
   --border: #ece7df;
   --shadow: 0 2px 12px rgba(45, 42, 50, .07);
   --radius: 18px;
-  font-size: 16px;
+  font-size: 17px;
 }
 * { box-sizing: border-box; margin: 0; }
 body {
@@ -133,14 +133,14 @@ h1 { font-size: 1.7rem; font-weight: 800; }
 .msg.user { align-self: flex-end; align-items: flex-end; }
 .bubble {
   padding: 13px 16px; border-radius: 18px; line-height: 2.1;
-  font-size: 1.12rem; box-shadow: var(--shadow); position: relative;
+  font-size: 1.35rem; box-shadow: var(--shadow); position: relative;
   white-space: pre-wrap;  /* stories are multi-line — keep the line breaks */
 }
 .msg.ai .bubble { background: var(--panel); border-bottom-left-radius: 6px; }
 .msg.user .bubble { background: var(--indigo); color: #fff; border-bottom-right-radius: 6px; line-height: 1.6; }
 .msg .who { font-size: .72rem; color: var(--sub); margin: 0 6px 3px; font-weight: 700; }
 
-ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
+ruby rt { font-size: .55em; color: var(--accent); font-weight: 600; }
 .no-furigana ruby rt { display: none; }
 .tok { cursor: pointer; border-radius: 4px; transition: background .1s; }
 .tok:hover { background: var(--accent-soft); }
@@ -155,7 +155,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 }
 .msg-actions button:hover { color: var(--ink); border-color: var(--sub); }
 
-.correction { margin-top: 7px; font-size: .82rem; border-radius: 12px; padding: 9px 12px; max-width: 100%; }
+.correction { margin-top: 7px; font-size: .9rem; border-radius: 12px; padding: 9px 12px; max-width: 100%; }
 .correction.good { background: var(--green-soft); color: var(--green); font-weight: 600; }
 .correction.fix { background: var(--amber-soft); border: 1px solid #f3ddb5; color: var(--ink); }
 .correction.fix .fixline { margin-bottom: 4px; }
@@ -172,7 +172,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 .hints { padding: 10px 24px; max-width: 860px; margin: 0 auto; width: 100%; display: flex; gap: 8px; flex-wrap: wrap; }
 .hint-card {
   background: var(--indigo-soft); border: 1px solid #d8d8f0; border-radius: 12px;
-  padding: 9px 13px; cursor: pointer; font-size: .88rem; transition: transform .1s;
+  padding: 9px 13px; cursor: pointer; font-size: .95rem; transition: transform .1s;
 }
 .hint-card:hover { transform: translateY(-1px); }
 .hint-card .en { color: var(--sub); font-size: .74rem; display: block; }
@@ -199,7 +199,7 @@ ruby rt { font-size: .5em; color: var(--accent); font-weight: 600; }
 }
 #chat-input {
   flex: 1; padding: 13px 18px; border-radius: 999px; border: 2px solid var(--border);
-  font-size: 16px; outline: none; background: var(--panel); min-width: 0;
+  font-size: 18px; outline: none; background: var(--panel); min-width: 0;
 }
 #chat-input:focus { border-color: var(--indigo); }
 .icon-btn { border: none; background: transparent; font-size: 1.1rem; border-radius: 10px; padding: 6px 10px; }

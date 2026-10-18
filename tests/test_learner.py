@@ -291,3 +291,15 @@ def test_build_drops_misparsed_pieces_of_kana_entries(monkeypatch):
     readings = {w["reading"] for w in P.build(cfg)["words"]}
     assert {"かいしゃ", "よやく", "いく", "ひる", "ごはん"} <= readings
     assert "いしゃ" not in readings and "やく" not in readings     # misparse leftovers
+
+
+def test_chat_bubbles_keep_all_kanji_with_furigana(profile):
+    # 銀行 isn't a learned kanji word, but bubbles keep it, with its reading as furigana
+    r = display.render("銀行は9時からです。", profile, all_kanji=True)
+    assert r.display == "銀行は9時からです。"
+    ruby = [seg for t in display.kaiwa_tokens(r) for seg in t["ruby"] if seg["r"]]
+    assert {"t": "銀行", "r": "ぎんこう"} in ruby
+    # the model's reading still fixes UniDic's misreadings in the furigana
+    r = display.render("富士山に行きました。", profile, reading="ふじさんにいきました。", all_kanji=True)
+    assert r.display == "富士山に行きました。"
+    assert {"t": "山", "r": "さん"} in [s for t in display.kaiwa_tokens(r) for s in t["ruby"]]

@@ -11,8 +11,10 @@ reply is checked against them before you see it.
 - **Checked replies**: Claude drafts each reply. A checker (UniDic morphology
   plus grammar rules) rejects anything outside what you know, and Claude
   rewrites it with specific feedback.
-- **Kanji you can read**: words are shown in kanji only if you've learned their
-  kanji in Anki (Core 2000); everything else is shown in hiragana.
+- **Kanji with furigana**: chat replies use normal kanji with readings above
+  (corrected by the model where the dictionary misreads). Plain-text places
+  without furigana (corrections, hints, reports) show unlearned kanji as kana,
+  and kanji typing suggestions offer only kanji you've learned in Anki.
 
 **Speaking progress**: every message you send is analyzed for which of your
 known words and grammar you produced on your own (as opposed to echoing your

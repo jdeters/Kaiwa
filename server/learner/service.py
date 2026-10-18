@@ -266,8 +266,9 @@ def reply(session: dict, db_messages: list, kaiwa_profile: dict, client, model: 
 
 
 def tokens(text: str, reading: str | None = None) -> list:
-    """Chat-UI tokens for a partner message (also used when a session is reloaded)."""
-    return display.kaiwa_tokens(display.render(text, profile(), reading or None))
+    """Chat-UI tokens for a partner message (also used when a session is reloaded):
+    every kanji kept, with furigana from the model's reading where it fixes UniDic's."""
+    return display.kaiwa_tokens(display.render(text, profile(), reading or None, all_kanji=True))
 
 
 def show(text: str) -> str:

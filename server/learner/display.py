@@ -54,11 +54,14 @@ def _mapper(ours: str, theirs: str):
     return at
 
 
-def render(text: str, profile: Profile, reading: str | None = None) -> Rendered:
+def render(text: str, profile: Profile, reading: str | None = None, all_kanji: bool = False) -> Rendered:
+    """all_kanji: keep every kanji (chat bubbles, where furigana gives the reading);
+    otherwise kanji the learner hasn't learned become kana (plain-text places)."""
     toks = morph.tokenize(text)
     segs, spans, ours = [], [], ""
     for t in toks:
-        known = not has_kanji(t.surface) or t.orth in profile.kanji or t.surface in profile.kanji
+        known = (all_kanji or not has_kanji(t.surface)
+                 or t.orth in profile.kanji or t.surface in profile.kanji)
         kana = t.kana if has_kanji(t.surface) else t.surface
         segs.append(Segment(t.surface if known else kana, t.surface, known and has_kanji(t.surface),
                             kana, t.pos1))
