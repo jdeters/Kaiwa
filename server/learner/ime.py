@@ -6,7 +6,8 @@ For each word whose kanji the learner has learned (profile.kanji, from Core
 たべます can become 食べます (たべ → 食べ), のみます → 飲みます, たかくない → 高くない.
 Picking the right kanji is recall practice; unlearned kanji are never offered.
 Kana words the learner knows only from the textbook (にほん) are offered in
-their usual spelling from JMdict when every kanji in it is learned (日本).
+their usual spelling (profile.kana_spellings, from JMdict) when every kanji in
+it is learned (日本).
 
 Each kanji in those words is also offered on its own, by its readings from
 KANJIDIC2 (らい → 来, so 来週 can be typed らい + しゅう even if 来週 itself isn't
@@ -18,10 +19,8 @@ are worked out from the words (日本 にほん − 本 ほん → 日 に, a pr
 import glob
 import json
 import os
-import re
 from functools import lru_cache
 
-from .. import dictionary
 from ..jp import kata_to_hira
 from . import morph
 from .grammar import ROOT
@@ -70,23 +69,13 @@ def table(profile: Profile) -> dict:
             add_word(orth, reading, toks[0])
         else:
             add(reading, orth)
-    # kana-only words, spelled with learned kanji (にほん → 日本) — the
-    # spelling of the same word, matched by meaning (ぜんぶ "all" is 全部, not
-    # 前部 "front part"), and only where no learned word already covers the kana
+    # kana-only words in their usual spelling (にほん → 日本), when every kanji is learned
     learned = {c for w in profile.kanji for c in w if _is_kanji(c)}
-    spelled = {}
-    dic = dictionary.spellings()
-    for w in profile.snapshot["words"]:
-        kana = w["reading"]
-        if not w["lemma"].startswith("reading:") or w.get("part") or kana in out:
-            continue
-        meaning = _gloss_words(w.get("meaning", ""))
-        options = [form for form, gloss in dic.get(kana, [])
-                   if all(c in learned or c in _HIRAGANA for c in form) and any(_is_kanji(c) for c in form)
-                   and (meaning & set(gloss) if meaning else True)]
-        if len(options) > 1 and not meaning:   # can't tell which word it is
-            continue
-        for form in options:
+    spelled, covered = {}, set(out)
+    for kana, forms in sorted(profile.kana_spellings.items()):
+        for form, common in forms:
+            if kana in covered or not common or not all(c in learned for c in form if _is_kanji(c)):
+                continue   # a learned word already covers the kana (いま → 今); odd spellings stay out
             toks = morph.tokenize(form)
             if len(toks) == 1:
                 add_word(form, kana, toks[0])
@@ -99,15 +88,6 @@ def table(profile: Profile) -> dict:
 
 def _is_kanji(c: str) -> bool:
     return "\u4e00" <= c <= "\u9fff"
-
-
-_HIRAGANA = set(chr(c) for c in range(0x3041, 0x3097))
-_STOP = {"a", "an", "the", "to", "of", "in", "on", "at", "for", "be", "is", "it", "or", "and",
-         "one", "s", "something", "someone", "thing", "things", "e", "g", "etc", "esp", "very"}
-
-
-def _gloss_words(text: str) -> set:
-    return set(re.findall(r"[a-z]+", text.lower())) - _STOP
 
 
 @lru_cache(maxsize=1)

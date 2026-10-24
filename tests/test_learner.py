@@ -320,21 +320,34 @@ def test_ime_single_kanji_by_attested_reading():
 
 
 
-def test_ime_spells_known_kana_words_with_learned_kanji(monkeypatch):
+def test_kana_words_in_their_kanji_spelling(monkeypatch):
     if not ime._kanjidic():
         pytest.skip("KANJIDIC2 not downloaded (./setup.sh)")
     from server import dictionary
+    from server.learner import profile as P
     monkeypatch.setattr(dictionary, "spellings", lambda: {
-        "にほん": [["日本", ["japan"]]],
-        "ぜんぶ": [["前部", ["front", "part"]], ["全部", ["all", "entire"]]]})
+        "にほん": [["日本", ["japan"], True]],
+        "あした": [["明日", ["tomorrow"], True]],
+        "なんようび": [["何曜日", ["day", "week", "what"], False]],
+        "ぜんぶ": [["前部", ["front", "part"], True], ["全部", ["all", "entire"], True]],
+        "みる": [["診る", ["examine", "see"], True]]})
+    words = [{**_word("reading:" + k, k), "meaning": m} for k, m in [
+        ("にほん", "Japan"), ("あした", "tomorrow"), ("なんようび", "what day of the week"),
+        ("ぜんぶ", "all, wholly"), ("みる", "see")]] + [_word("見る", "みる")]
+    kanji = {"日曜": "Core 2000", "本": "Core 2000", "何": "Core 2000", "日": "Core 2000"}
+    spellings = P.kana_spellings(words, {}, kanji)
+    assert spellings["ぜんぶ"] == [["全部", True]]       # matched by meaning, not 前部
+    assert "みる" not in spellings                       # known as 見る: no 診る
     snap = {"textbook": "jfbp-r4-kana", "lesson": 10, "grammar": [], "phrases": [],
-            "words": [{**_word("reading:にほん", "にほん"), "meaning": "Japan"},
-                      {**_word("reading:ぜんぶ", "ぜんぶ"), "meaning": "all, wholly"}],
-            "kanji_words": {"日曜": "Core 2000", "本": "Core 2000", "前": "Core 2000", "部": "Core 2000"}}
-    t = ime.table(Profile(snap))
-    assert t["にほん"] == ["日本"]          # textbook kana word, both kanji learned
+            "words": words, "kanji_words": kanji, "kana_spellings": spellings}
+    p = Profile(snap)
+    assert validator.validate("明日、何曜日", p).ok           # UniDic: あす, なんようひ
+    assert [w for *_, w in p.word_spans(morph.tokenize("明日"))] == ["reading:あした"]
+    t = ime.table(p)
+    assert t["にほん"] == ["日本"]          # both kanji learned
     assert "日" in t["に"]                  # 日本 − 本 ほん: に, a shortened にち
-    assert "ぜんぶ" not in t                # 前部 is another word; 全部's 全 isn't learned
+    assert "あした" not in t                # 明 isn't learned
+
 
 def test_spaced_words_trusts_the_textbook_spacing():
     from server.learner.profile import spaced_words

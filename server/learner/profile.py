@@ -10,6 +10,7 @@ import time
 
 import yaml
 
+from .. import dictionary
 from ..jp import kata_to_hira
 from . import anki, grammar, morph
 
@@ -228,8 +229,35 @@ def build(cfg: dict) -> dict:
         "phrases": sorted(phrases.values(), key=lambda p: p["kana"]),
         "kanji_words": dict(sorted(kanji.items())),
         "kanji_readings": dict(sorted(kanji_readings.items())),
+        "kana_spellings": kana_spellings(words.values(), kanji_readings, kanji),
         "stats": stats,
     }
+
+
+def kana_spellings(words, kanji_readings: dict, kanji_words=()) -> dict:
+    """Words known only in kana, in their kanji spellings: {kana: [[form, common]]}
+    (あした → 明日, なんようび → 何曜日). The partner writes them that way, and
+    UniDic reads 明日 あす. Words learned with their kanji are left alone: みる is
+    見る, and matching by meaning would also bring in 診る and 観る. Spellings JMdict
+    doesn't mark common count only with learned kanji (何曜日, not 殺る for やる)."""
+    words = list(words)
+    learned = {c for w in kanji_words for c in w}
+    with_kanji = ({w["reading"] for w in words if not w["lemma"].startswith("reading:")}
+                  | set(kanji_readings.values()))
+    out = {}
+    for w in words:
+        kana = w["reading"]
+        if w["lemma"].startswith("reading:") and not w.get("part") and kana not in with_kanji:
+            forms, seen = [], set()
+            for form, common in dictionary.spellings_of(kana, w.get("meaning", "")):
+                if form not in seen and (common or all(c in learned for c in form if _has_kanji(c))):
+                    forms.append([form, common])
+                    seen.add(form)
+            if any(c for _, c in forms):   # 来週 is the word; 来秋 only shares its sound
+                forms = [f for f in forms if f[1]]
+            if forms:
+                out[kana] = forms
+    return dict(sorted(out.items()))
 
 
 def save(snapshot: dict, path: str = SNAPSHOT_PATH):
@@ -260,9 +288,20 @@ class Profile:
         self.phrases = [p["kana"] for p in snapshot["phrases"] if len(p["kana"]) >= 2]
         self.kanji = set(snapshot.get("kanji_words", {}))  # written forms shown in kanji
         self.kanji_readings = snapshot.get("kanji_readings", {})   # 私 → わたし, as the deck reads it
+        # kana-only words in kanji (明日 → あした): one token is a known lemma;
+        # more (何曜 + 日) are a compound, below
+        self.kana_spellings = snapshot.get("kana_spellings", {})
+        self.spelled = {}
+        compounds = [(tuple(w["parts"]), w["lemma"]) for w in snapshot["words"] if w.get("parts")]
+        for kana, forms in self.kana_spellings.items():
+            for form, _ in forms:
+                toks = morph.tokenize(form)
+                if len(toks) == 1:
+                    self.spelled.setdefault(toks[0].key, f"reading:{kana}")
+                else:
+                    compounds.append((tuple(t.key for t in toks), f"reading:{kana}"))
         # compounds the tokenizer splits, by their tokens' keys, longest first
-        self.compounds = sorted(((tuple(w["parts"]), w["lemma"]) for w in snapshot["words"]
-                                 if w.get("parts")), key=lambda c: -len(c[0]))
+        self.compounds = sorted(compounds, key=lambda c: -len(c[0]))
         with open(os.path.join(grammar.CONTENT, "closed_class.yaml"), encoding="utf-8") as f:
             self.closed = set(yaml.safe_load(f)["words"])
         # one id per word for tracking: a lemma (飲む), or "reading:…" for words
@@ -310,7 +349,7 @@ class Profile:
             return True
         if tok.lemma in self.closed or tok.surface in self.closed:
             return True
-        if tok.key in self.lemmas or tok.lemma in self.lemmas:
+        if tok.key in self.lemmas or tok.lemma in self.lemmas or tok.key in self.spelled:
             return True
         return bool(tok.lform) and tok.lform in self.readings
 
@@ -325,6 +364,8 @@ class Profile:
             return tok.key
         if tok.lemma in self.lemmas:   # snapshots built before Tok.key
             return tok.lemma
+        if tok.key in self.spelled:    # 明日 → reading:あした
+            return self.word_ids.get(self.spelled[tok.key][len("reading:"):], self.spelled[tok.key])
         return self.word_ids.get(tok.lform)
 
     def word_spans(self, toks: list) -> list[tuple[int, int, str]]:

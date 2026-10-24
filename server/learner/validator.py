@@ -65,6 +65,9 @@ def validate(text: str, profile: Profile, concepts: dict | None = None) -> Resul
     concepts = concepts or grammar.load_concepts()
     toks = morph.tokenize(text)
     exempt = _phrase_exempt(toks, profile)
+    for i, j, _ in profile.word_spans(toks):   # a known word the tokenizer splits (何曜 + 日)
+        if j - i > 1:
+            exempt.update(range(i, j))
     res = Result(text)
 
     function = set()

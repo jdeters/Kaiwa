@@ -68,11 +68,10 @@ def build_if_needed():
 
 @lru_cache(maxsize=1)
 def spellings() -> dict:
-    """{kana: [[kanji spelling, gloss words], …]}: the common kanji spellings of
-    common words not usually written in kana (にほん → 日本 "japan"), extracted
-    once from the JMdict source
-    into data/jmdict_spellings.json. Per spelling, unlike jmdict.db's common
-    flag, so rare variants (すき焼, 鋤焼き) stay out."""
+    """{kana: [[kanji spelling, gloss words, common], …]} for every JMdict word not
+    usually written in kana (にほん → 日本 "japan"), extracted once from the JMdict
+    source into data/jmdict_spellings.json. Rare, outdated and irregular spellings
+    (鋤焼き) are left out; "common" is per spelling (すき焼き yes, すき焼 no)."""
     if not os.path.exists(SPELLINGS):
         src = _source_json()
         if not src:
@@ -81,21 +80,42 @@ def spellings() -> dict:
             words = json.load(f)["words"]
         out: dict = {}
         for w in words:
-            forms = [k["text"] for k in w.get("kanji", []) if k.get("common")]
+            forms = [(k["text"], bool(k.get("common"))) for k in w.get("kanji", [])
+                     if not {"rK", "oK", "sK", "iK", "ik", "io"} & set(k.get("tags", []))]
             senses = w.get("sense", [])
             if not forms or (senses and "uk" in senses[0].get("misc", [])):   # usually kana: いつも, ください
                 continue
-            glosses = " ".join(g["text"] for s in w.get("sense", [])[:3] for g in s.get("gloss", []))
+            glosses = " ".join(g["text"] for s in senses[:3] for g in s.get("gloss", []))
             gloss_words = sorted(set(re.findall(r"[a-z]+", glosses.lower())))
             for k in w.get("kana", []):
                 applies = k.get("appliesToKanji") or ["*"]
-                for form in forms:
-                    if k.get("common") and ("*" in applies or form in applies):
-                        out.setdefault(k["text"], []).append([form, gloss_words])
+                for form, common in forms:
+                    if "*" in applies or form in applies:
+                        out.setdefault(k["text"], []).append([form, gloss_words, common and bool(k.get("common"))])
         with open(SPELLINGS, "w", encoding="utf-8") as f:
             json.dump(out, f, ensure_ascii=False)
     with open(SPELLINGS, encoding="utf-8") as f:
         return json.load(f)
+
+
+_STOP = {"a", "an", "the", "to", "of", "in", "on", "at", "for", "be", "is", "it", "or", "and",
+         "one", "s", "something", "someone", "thing", "things", "e", "g", "etc", "esp", "very"}
+
+
+def gloss_words(text: str) -> set:
+    return set(re.findall(r"[a-z]+", text.lower())) - _STOP
+
+
+def spellings_of(kana: str, meaning: str) -> list:
+    """[[spelling, common]] of the word `kana` that means `meaning`: ぜんぶ "all,
+    wholly" → 全部, not 前部 "front part". Only kanji + hiragana spellings; with no
+    meaning to go by, only an unambiguous word."""
+    options = [(form, gloss, common) for form, gloss, common in spellings().get(kana, [])
+               if all("\u4e00" <= c <= "\u9fff" or "\u3041" <= c <= "\u3096" for c in form)]
+    want = gloss_words(meaning)
+    if want:
+        return [[form, common] for form, gloss, common in options if want & set(gloss)]
+    return [[f, c] for f, _, c in options] if len({tuple(g) for _, g, _ in options}) == 1 else []
 
 
 _con = None
