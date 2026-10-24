@@ -43,22 +43,42 @@ def _hira(s: str) -> str:
     return kata_to_hira(re.sub(r"[\s、。！？!?,.]", "", s or ""))
 
 
+def _forms(fragment: str) -> set:
+    """A correction fragment as written and as read: "多い" is also おおい, so it
+    can be compared with token readings."""
+    return {_hira(fragment), _hira("".join(t.kana for t in morph.tokenize(fragment)))} - {""}
+
+
 def observe(text: str, profile: Profile, prev_partner: str = "", errors=(), hint: bool = False,
             particles=(), uncertain=()) -> list:
     """particles: [{"particle", "use"}] in order, from the correction call — resolves
     に/で/と/から/の to a specific concept. uncertain: what possibly-misheard words
-    probably were (spoken messages); they're left out, since what was said is unknown."""
+    probably were (spoken messages); they're left out, since what was said is unknown.
+    Spelling slips count as the word meant (おおいしです would otherwise read as
+    多い + し) when the fix parses as whole words; otherwise they're left out
+    (かるまで fixed to くるまで still reads as 来る + まで)."""
+    errors, uncertain, fixed = list(errors or ()), list(uncertain or ()), []
+    for e in errors:
+        if e.get("category") == "spelling" and e.get("wrong"):
+            if e["wrong"] in text and e.get("right"):
+                text = text.replace(e["wrong"], e["right"], 1)
+                fixed.append(e["right"])
+            else:   # spelled differently in the normalized text: leave that stretch out
+                uncertain.append(e["wrong"])
+    errors = [e for e in errors if e.get("category") != "spelling"]
     toks = morph.tokenize(text)
     hits = grammar.detect(toks)
     function = {i for h in hits for i in h.function}   # grammar tokens aren't vocabulary
     partner_words = {w for *_, w in profile.word_spans(morph.tokenize(prev_partner))}
-    # a span is an error if the correction's "wrong" fragment has it and the "right" one doesn't
-    flagged = [(_hira(e.get("wrong", "")), _hira(e.get("right", ""))) for e in errors or ()]
+    # a span is an error if the correction's "wrong" fragment has it and the "right" one
+    # doesn't — compared by reading too, since fragments may be in kanji (多い → 大きい)
+    flagged = [(_forms(e.get("wrong", "")), _forms(e.get("right", ""))) for e in errors]
 
     def outcome(kana: str, word: str | None = None) -> str:
         if hint:
             return "hint"
-        if kana and any(kana in w and kana not in r for w, r in flagged):
+        if kana and any(any(kana in w for w in ws) and not any(kana in r for r in rs)
+                        for ws, rs in flagged):
             return "error"
         if word and word in partner_words:
             return "echo"
@@ -87,6 +107,12 @@ def observe(text: str, profile: Profile, prev_partner: str = "", errors=(), hint
                 unsure_idx |= {i for i, (a, b) in enumerate(spans)
                                if b > a and a < start + len(u) and b > start}
                 start = whole.find(u, start + 1)
+
+    bounds = {t.start for t in toks} | {t.end for t in toks}
+    for right in fixed:
+        a = text.find(right)
+        if a >= 0 and not (a in bounds and a + len(right) in bounds):
+            unsure_idx |= {i for i, t in enumerate(toks) if t.start < a + len(right) and t.end > a}
 
     out, seen = [], set()
     for i, j, wid in profile.word_spans(toks):

@@ -6,7 +6,7 @@ CORRECTION_PROMPT = """You are a strict but kind Japanese grammar checker inside
 Analyze the student's Japanese message from a conversation.
 
 The student is {learner}.
-Student's message: {text}
+{context}Student's message: {text}
 {spoken}
 Return ONLY JSON with this exact shape:
 {{
@@ -32,8 +32,10 @@ Rules:
 - Only flag real errors, not stylistic preferences.
 - Kanji vs kana spelling is NEVER an error. Only flag a kanji when it is the wrong character
   for the intended word (category "spelling" or "word choice").
-- Keep corrections within what the student has learned where possible: prefer the simplest
-  correct fix.
+- First work out what the student meant, from the conversation; correct toward that meaning.
+  Then keep the fix within what the student has learned where possible: the simplest correct
+  fix. A garbled word is the word that fits the conversation, even one they haven't learned
+  (asking about a bus, ばんご is ばんごう "number", not ばんごはん "dinner").
 - A word that isn't Japanese — an English word in katakana that Japanese doesn't use (メデキン
   for "medicine") or a made-up word — IS an error (category "word choice"): give the real
   Japanese word in "right" even if the student hasn't learned it, and say so in the explanation.
@@ -81,6 +83,7 @@ Don't mention how the word is written in kanji."""
 
 SUMMARY_PROMPT = """You are a Japanese tutor writing an end-of-session report for a student.
 The student is {learner}.
+The conversation: {scene}
 
 Conversation transcript:
 {transcript}

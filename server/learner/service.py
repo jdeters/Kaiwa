@@ -263,6 +263,10 @@ so the learner will need to say them. It should make a relaxed conversation of a
 minutes: one clear purpose, with room for small talk around it — not a checklist. The partner (a Japanese speaker) starts the conversation; the learner
 replies using only beginner Japanese.
 
+Word targets are for the learner to bring up, so keep them out of the setting and the
+partner's side: with 土曜日 as a target, don't set the scene on a Saturday (the partner would
+naturally say 今日は土曜日です); make it something the learner has a reason to say.
+
 The whole scene must be talkable with the vocabulary above: the place, the things and people
 involved, and what each side wants. If the learner doesn't know the word for something (e.g.
 medicine, a ticket, a haircut), don't build the scene around it — choose a different situation.

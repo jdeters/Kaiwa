@@ -243,7 +243,13 @@ class Partner:
                 best = d
             if not d["violations"]:
                 break
+        only_targets = lambda d: all(v.startswith("[target]") for v in d["violations"])
         if best["violations"]:
+            # Keeping practice targets for the learner to say is a nicety: a draft whose only
+            # problem is saying one first beats a salvaged non-answer (「10時ですね。」 to a question).
+            best = min((d for d in drafts if only_targets(d)), key=lambda d: len(d["violations"]),
+                       default=best)
+        if not only_targets(best):
             # No draft passed whole. Drafts are a few short sentences and usually
             # only one breaks the rules, so show the sentences that do pass.
             text = self._salvage(sorted(drafts, key=lambda d: len(d["violations"])))

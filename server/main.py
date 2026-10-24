@@ -267,8 +267,12 @@ def _correct_message(msg: dict) -> dict:
         if current and current.get("correction"):
             return current["correction"]
         spoken = (msg.get("meta") or {}).get("channel") == "voice"
+        # what they were answering: ばんごのバス after 「バスは10時に来ます」 is ばんごう, not ばんごはん
+        prev = _prev_partner(msg)
+        context = (f"They were replying to their conversation partner, who said: {prev}\n"
+                   "Use it to understand what the student meant.\n" if prev else "")
         result = llm.chat_json(
-            prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"],
+            prompts.CORRECTION_PROMPT.format(learner=learner.describe(), text=msg["text"], context=context,
                                              spoken=prompts.SPOKEN_NOTE if spoken else ""), settings())
         result.setdefault("has_errors", False)
         result.setdefault("errors", [])
@@ -303,14 +307,18 @@ def correct(body: dict = Body(...)):
     return _correct_message(msg)
 
 
+def _prev_partner(msg: dict) -> str:
+    """The partner's line just before a learner message."""
+    earlier = [m for m in db.get_messages(msg["session_id"]) if m["id"] < msg["id"]]
+    return next((m["text"] for m in reversed(earlier) if m["role"] == "assistant"), "")
+
+
 def _record_production(msg: dict, normalized: str, errors: list, particles=(), uncertain=()):
     """Track which known words and grammar the learner produced in this message."""
     if learner.profile() is None:
         return
     meta = msg.get("meta") or {}
-    earlier = [m for m in db.get_messages(msg["session_id"]) if m["id"] < msg["id"]]
-    prev_partner = next((m["text"] for m in reversed(earlier) if m["role"] == "assistant"), "")
-    obs = learner.observe(normalized, prev_partner, errors, hint=bool(meta.get("hint")),
+    obs = learner.observe(normalized, _prev_partner(msg), errors, hint=bool(meta.get("hint")),
                           particles=particles, uncertain=uncertain)
     db.set_observations(msg["id"], msg["session_id"], meta.get("channel", "text"), obs, ts=msg["ts"])
 
@@ -418,8 +426,12 @@ def end_session(sid: int):
                 corrections.append(f"{e.get('wrong')} → {e.get('right')} ({e.get('explanation')})")
     summary = {}
     if any(m["role"] == "user" for m in msgs):
+        scen = session.get("scenario") or {}
+        scene = (f"a roleplay — {scen.get('title', '')}: {scen.get('setting', '')}".strip()
+                 if scen and session["mode"] != "free_chat" else "a free conversation with a friend")
         summary = llm.chat_json(
-            prompts.SUMMARY_PROMPT.format(learner=learner.describe(), transcript=transcript[-4000:],
+            prompts.SUMMARY_PROMPT.format(learner=learner.describe(), scene=scene,
+                                          transcript=transcript[-4000:],
                                           corrections="\n".join(corrections) or "none"),
             settings(),
         )
@@ -430,12 +442,18 @@ def end_session(sid: int):
     summary["summary"] = learner.show_quoted(summary["summary"])
     for k in ("strengths", "areas_to_improve"):
         summary[k] = [learner.show_quoted(x) for x in summary[k]]
+    # "new" words the learner already knows (仕事, 多い) aren't new
+    summary["new_words"] = [w for w in summary["new_words"]
+                            if any(v.kind == "vocab" for v in learner.check(w.get("word", "")).violations)]
     for w in summary["new_words"]:
-        entry = dictionary.lookup(w.get("word", "")) or (
-            dictionary.lookup(jp.lemma_of(w.get("word", "")) or ""))
-        if entry:  # prefer real dictionary glosses over model guesses
+        reading = jp.kata_to_hira(w.get("reading", ""))
+        entry = dictionary.lookup(w.get("word", ""), reading or None) or (
+            dictionary.lookup(jp.lemma_of(w.get("word", "")) or "", reading or None))
+        # prefer real dictionary glosses over model guesses — for the same word: いかがですか's
+        # dictionary form 如何 is first read どう; 歩きます (あるきます) still matches 歩く (あるく)
+        if entry and (not reading or reading.startswith(entry["reading"][:-1] or entry["reading"])):
             w["meaning"] = entry["meaning"]
-            w["reading"] = entry["reading"] or w.get("reading", "")
+            w["reading"] = entry["reading"] or reading
         w["word"] = learner.show(w.get("word", ""))  # new words: no unlearned kanji
     summary["stats"] = {"turns": sum(1 for m in msgs if m["role"] == "user"),
                         "corrections": len(corrections)}
